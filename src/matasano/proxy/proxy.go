@@ -141,6 +141,7 @@ func (self *Connection) Loop() {
 		self.buffer.Write(buf[0:l])
 
 		for {
+			log.Printf("io: %v\n", self.buffer.String())
 			r, c, err := self.check()
 			if err != nil {
 				self.e500("BAD REQUEST")
@@ -240,17 +241,15 @@ func (self *Connection) tls_connect(c *ConnectRequest) (err error) {
 		}
 
 		if conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", c.host, c.port), &conf); err != nil {
-			panic(err)
 			return
 		}
 
 		self.inbound.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 
-		conf = tls.Config{
-			InsecureSkipVerify: true,
+		inconf := tls.Config{
 			Certificates:       []tls.Certificate{*cert},
 		}
-		self.inbound = tls.Server(self.inbound, &conf)
+		self.inbound = tls.Server(self.inbound, &inconf)
 		self.out_host = net.JoinHostPort(c.host, strconv.Itoa(int(c.port)))
 		self.outbound = conn
 	} else {

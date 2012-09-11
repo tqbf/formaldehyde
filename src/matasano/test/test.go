@@ -5,7 +5,9 @@ import (
 	"log"
 	"bytes"
 	"matasano/ca"
-	"matasano/proxy"
+//	"matasano/proxy"
+	"crypto/tls"
+	"net"
 )
 
 type Handler struct {
@@ -21,17 +23,41 @@ func (self Handler) HandleResponse(raw *bytes.Buffer) {
 }
 
 func main() { 
-	h := Handler{}
+	var buf [1024]byte
+	listener, err := net.Listen("tcp", ":7778")
+	conn, err := listener.Accept()
+ 	l, err := conn.Read(buf[0:])
+ 	if err != nil {
+ 		log.Fatal(err)
+ 	}
+ 	conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+
 	ca, err := ca.NewCA("/tmp", "/tmp/cert.der", "/tmp/key.der")
-	if err != nil { 
-		log.Fatal(err)
+	cert, err := ca.Lookup("hreservice2-qc.hewitt.com")
+	conf := tls.Config{
+		Certificates: []tls.Certificate{*cert},
 	}
-	p, err := proxy.NewProxy(":7777", ca, h)
+
+	tlsconn := tls.Server(conn, &conf)
+	l, err = tlsconn.Read(buf[0:2])
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	go p.Loop()
+	log.Print(string(buf[0:l]))
+	return
 
-	<- p.Completion
+//	h := Handler{}
+//	ca, err := ca.NewCA("/tmp", "/tmp/cert.der", "/tmp/key.der")
+//	if err != nil { 
+//		log.Fatal(err)
+//	}
+//	p, err := proxy.NewProxy(":7778", ca, h)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	go p.Loop()
+//
+//	<- p.Completion
 }
