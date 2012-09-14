@@ -105,5 +105,11 @@ func main() {
 	tmp = src ^ dst
 	fmt.Printf("%b\n", tmp)		
 
+	fmt.Println("bleep")
+	src = 10
+	kk := int32(-5)
+
+	src = src + uint16(kk)
+	fmt.Println(src)
 
 }

@@ -2,12 +2,14 @@ package msp43x
 
 import (
 	"fmt"
-
+	"bytes"
+	"errors"
 //	"log"
 //	"errors"
 )
 
 type Memory interface {
+	Load6Bytes(address uint16) ([]byte, error)
 	LoadWord(address uint16) (uint16, error)
 	StoreWord(address uint16, value uint16) error
 	LoadByte(address uint16) (uint8, error)
@@ -17,6 +19,16 @@ type Memory interface {
 type CPU struct {
 	regs   [16]uint16
 	memory Memory
+}
+
+func (cpu *CPU) SetRegs(regs [16]uint16) {
+	for i, v := range(regs) {
+		cpu.regs[i] = v
+	}
+}
+
+func (cpu *CPU) SetMemory(memory Memory) {
+	cpu.memory = memory
 }
 
 func (cpu *CPU) Pc() uint16 {
@@ -65,11 +77,15 @@ type Insn struct {
 	dstx int16
 
 	width int
+
+	raw	[]byte
 }
 
 const (
 	E_TooShort = iota
 	E_BadOperand
+	E_AddressTooHigh
+	E_AddressUnaligned
 )
 
 type CpuError struct {
@@ -125,6 +141,38 @@ func Disassemble(raw []byte) (i Insn, err error) {
 	}
 	err = nil
 
+	isConstant := func(i *Insn) bool { 
+		if i.source != 2 && i.source != 3 {
+			return false
+		}
+
+		if i.source == 2 && (i.as != 2 && i.as != 3) {
+			return false
+		}
+
+		return true
+	}
+
+	constantMode := func(i *Insn) addrMode {
+		switch {
+		case i.as == 0 && i.source == 3:
+			return AmConst0
+		case i.as == 1 && i.source == 3:
+			return AmConst1
+		case i.as == 2 && i.source == 3:
+			return AmConst2
+		case i.as == 3 && i.source == 3:
+			return AmConstNeg1
+		case i.as == 2 && i.source == 2:
+			return AmConst4
+		case i.as == 3 && i.source == 2:
+			return AmConst8
+		}
+	
+		panic("bad constant mode logic")
+		return 0
+	}
+
 	if cap(raw) < 2 {
 		err = newError(E_TooShort, "less than 2 bytes")
 		return
@@ -153,16 +201,33 @@ func Disassemble(raw []byte) (i Insn, err error) {
 		i.source = int4(iword & 15)
 
 		i.mode = interpAs(i.as)
-		if i.as == 1 {
-			if cap(raw) < 4 {
-				err = newError(E_TooShort, "missing index word")
-				return
-			}
 
-			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
-			i.width = 4
+		if isConstant(&i) {
+			i.mode = constantMode(&i)
+		} else {
+	 		if i.as == 1 {
+	 			if cap(raw) < 4 {
+	 				err = newError(E_TooShort, "missing index word")
+	 				return
+	 			}
+	 
+	 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
+	 			i.width = 4
+	 
+	 			if i.source == 2 {
+	 				i.mode = AmAbsolute
+	 			}
+	 		} else if i.as == 3 && i.source == 0 {
+	 			if cap(raw) < 4 {
+	 				err = newError(E_TooShort, "missing immediate word")
+	 				return
+	 			}
+	 
+	 			i.width = 4
+	 			i.mode = AmImmediate
+	 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
+	 		} 
 		}
-
 	case ItCondJump:
 		i.condition = condition(iword >> 10 & 7)
 		off := int(iword) & 1023
@@ -192,15 +257,22 @@ func Disassemble(raw []byte) (i Insn, err error) {
 		i.destination = int4(iword & 15)
 
 		i.mode = interpAs(i.as)
-
+		if i.as == 1 && i.source == 2 {
+			i.dstMode = AmAbsolute
+		}
+	
 		if i.ad == 1 {
-			i.dstMode = AmIndexed
+			if i.destination == 2 {
+				i.dstMode = AmAbsolute
+			} else {
+				i.dstMode = AmIndexed
+			}
 		} else {
 			i.dstMode = AmRegDirect
 		}
 
 		switch {
-		case i.as == 1 && i.ad == 1:
+		case isConstant(&i) == false && i.as == 1 && i.ad == 1:
 			if cap(raw) < 6 {
 				err = newError(E_TooShort, "missing src and dst index words")
 				return
@@ -209,6 +281,9 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.dstx = int16(int(raw[5])<<8 | int(raw[4]))
 			i.width = 6
+
+		case isConstant(&i) && i.ad == 1:
+			fallthrough
 
 		case i.ad == 1:
 			if cap(raw) < 4 {
@@ -219,7 +294,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			i.dstx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.width = 4
 
-		case i.as == 1:
+		case isConstant(&i) == false && i.as == 1:
 			if cap(raw) < 4 {
 				err = newError(E_TooShort, "missing src index word")
 				return
@@ -227,14 +302,47 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.width = 4
+
+		case i.as == 3 && i.source == 0 && i.ad == 1:
+			if cap(raw) < 6 {
+				err = newError(E_TooShort, "missing src immed and dst index words")
+				return
+			}
+
+			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
+			i.dstx = int16(int(raw[5])<<8 | int(raw[4]))
+			i.width = 6
+			i.mode = AmImmediate
+
+		case i.as == 3 && i.source == 0 && i.ad == 0:
+			if cap(raw) < 4 {
+				err = newError(E_TooShort, "missing src immed word")
+				return
+			}
+
+			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
+			i.width = 4
+			i.mode = AmImmediate
+
+		}
+
+		if isConstant(&i) {
+			i.mode = constantMode(&i)
 		}
 	}
+
+	i.raw = raw[0:i.width]
 
 	return
 }
 
 func mode_string(mode addrMode, reg int4, ext int16) (src string) {
 	src = "???"
+	
+	if mode == AmImmediate {
+		return fmt.Sprintf("#%d", ext)
+	}
+
 	if reg != 3 {
 		switch mode {
 		case AmRegDirect:
@@ -266,21 +374,46 @@ func mode_string(mode addrMode, reg int4, ext int16) (src string) {
 	return
 }
 
+func (cpu CPU) String() string {
+	var buffer bytes.Buffer
+
+	buffer.WriteString(fmt.Sprintf("msp43x(%p) pc:%0.4X sr:%0.16b sp:%0.4X\n", &cpu, cpu.Pc(), cpu.Sr(), cpu.Sp()))
+	buffer.WriteString(fmt.Sprintf("\tr4 %0.4X %0.4X %0.4X %0.4X\n", cpu.regs[4], cpu.regs[5], cpu.regs[6], cpu.regs[7]))
+	buffer.WriteString(fmt.Sprintf("\tr8 %0.4X %0.4X %0.4X %0.4X\n", cpu.regs[8], cpu.regs[9], cpu.regs[10], cpu.regs[11]))
+	buffer.WriteString(fmt.Sprintf("\trC %0.4X %0.4X %0.4X %0.4X\n", cpu.regs[12], cpu.regs[13], cpu.regs[14], cpu.regs[15]))
+	
+	return buffer.String()
+}
+
 func (i Insn) String() string {
+	var buf bytes.Buffer
+
+	for k := 0; k < len(i.raw); k++ {
+		buf.WriteString(fmt.Sprintf("%0.2x ", i.raw[k]))
+	}
+
+	bytestr := func(i *Insn) string {
+		if i.Byte() {
+			return ".B"
+		}
+		return "";
+	}
+
 	switch i.family {
 	case ItSingleOperand:
-		return fmt.Sprintf("%s %s",
-			opcode_string(i.opcode, true),
-			mode_string(i.mode, i.source, i.srcx))
+		buf.WriteString(fmt.Sprintf("%s%s %s",
+			opcode_string(i.opcode, true), bytestr(&i),
+			mode_string(i.mode, i.source, i.srcx)))
 	case ItCondJump:
-		return fmt.Sprintf("%v $%d", i.condition, i.offset+2)
+		buf.WriteString(fmt.Sprintf("%v $%d", i.condition, i.offset+2))
 	case ItDoubleOperand:
-		return fmt.Sprintf("%s %s %s",
-			opcode_string(i.opcode, false),
+		buf.WriteString(fmt.Sprintf("%s%s %s, %s",
+			opcode_string(i.opcode, false), bytestr(&i),
 			mode_string(i.mode, i.source, i.srcx),
-			mode_string(i.dstMode, i.destination, i.dstx))
+			mode_string(i.dstMode, i.destination, i.dstx)))
 	}
-	return "INVALID"
+
+	return buf.String()
 }
 
 func (cpu *CPU) S_C() int {
@@ -332,7 +465,7 @@ func (i *Insn) cg2v() int16 {
 }
 
 func (cpu *CPU) bw_eval(i *Insn, val int32) int32 {
-	if i.bw == 1 {
+	if i.Byte() { 
 		switch i.opcode {
 		case Op1Swpb, Op1Sxt, Op1Call, Op1Reti:
 			// don't honor B/W
@@ -345,7 +478,7 @@ func (cpu *CPU) bw_eval(i *Insn, val int32) int32 {
 }
 
 func (cpu *CPU) bw_store(i *Insn, reg int4, val uint16) {
-	if i.bw == 1 {
+	if i.Byte() { 
 		switch i.opcode {
 		case Op1Swpb, Op1Sxt, Op1Call, Op1Reti:
 			cpu.regs[reg] = val
@@ -371,28 +504,63 @@ func (cpu *CPU) v(i *Insn, v int4) (val int32) {
 
 func (cpu *CPU) src_operand(i *Insn) (uint16, error) {
 	switch {
+	case i.mode == AmAbsolute:	
+		x, err := cpu.memory.LoadWord(uint16(i.srcx))
+		if err != nil {
+			return 0, err
+		}
+		return uint16(cpu.bw_eval(i, int32(x))), nil
+	case i.mode == AmImmediate:
+		return uint16(cpu.bw_eval(i, int32(i.srcx))), nil
 	case i.mode == AmRegDirect:
 		return uint16(cpu.bw_eval(i, cpu.v(i, i.source))), nil
 	case i.mode == AmIndexed:
 		base := cpu.v(i, i.source)
 		base += int32(i.srcx)
 		v, err := cpu.memory.LoadWord(uint16(base))
-		return cpu.bw_eval(i, v), err
+		return uint16(cpu.bw_eval(i, int32(v))), err
 	case i.mode == AmRegIndirect:
 		addr := cpu.v(i, i.source)
-		v, err := cpu.memory.LoadWord(uint16(addr))
-		return cpu.bw_eval(i, v), err
+		var v uint16
+		var err error
+		if i.Byte() {
+			var x uint8
+			x, err = cpu.memory.LoadByte(uint16(addr))
+			v = uint16(x)
+		} else {
+			v, err = cpu.memory.LoadWord(uint16(addr))
+		}
+		return uint16(cpu.bw_eval(i, int32(v))), err
 	case i.mode == AmIndirectIncr:
 		addr := cpu.v(i, i.source)
-		if i.bw == 1 {
+		var (
+			v uint16
+			x uint8
+			err error
+		)
+		if i.Byte() { 
+			x, err = cpu.memory.LoadByte(uint16(addr))
+			v = uint16(x)
 			cpu.regs[i.source] += 1
 		} else {
+			v, err = cpu.memory.LoadWord(uint16(addr))
 			cpu.regs[i.source] += 2
 		}
-		v, err := cpu.memory.LoadWord(uint16(addr))
-		return cpu.bw_eval(i, v), err
+		return uint16(cpu.bw_eval(i, int32(v))), err
+	case i.mode == AmConst4:
+		return uint16(4), nil
+	case i.mode == AmConst8:
+		return uint16(8), nil
+	case i.mode == AmConst0:
+		return uint16(0), nil
+	case i.mode == AmConst1:
+		return uint16(1), nil
+	case i.mode == AmConst2:
+		return uint16(2), nil
+	case i.mode == AmConstNeg1:
+		return uint16(0xffff), nil
 	default:
-		panic("unknown addressing mode")
+		return 0, errors.New("unknown/invalid source addressing mode")
 	}
 
 	// unreached
@@ -402,88 +570,129 @@ func (cpu *CPU) src_operand(i *Insn) (uint16, error) {
 func (cpu *CPU) src_operand_store(i *Insn, v uint16) (err error) {
 	err = nil
 	switch {
+	case i.mode == AmAbsolute:
+		if i.Byte() { 
+			return cpu.memory.StoreByte(uint16(i.srcx), uint8(v))
+		} else {
+			return cpu.memory.StoreWord(uint16(i.srcx), uint16(v))
+		}
 	case i.mode == AmRegDirect:
 		if i.source == 3 {
 			return newError(E_BadOperand, "can't store to CG2")
 		}
 
-		bw_store(i, i.source, v)
+		cpu.bw_store(i, i.source, v)
 	case i.mode == AmIndexed:
 		base := cpu.v(i, i.source)
 		base += int32(i.srcx)
-		if bw == 1 && i.opcode != Op1Sxt && i.opcode != Op1Swpb {
-			err = cpu.memory.StoreByte(uint16(base), v&0xff)
+		if i.Byte() {
+			err = cpu.memory.StoreByte(uint16(base), uint8(v&0xff))
 		} else {
 			err = cpu.memory.StoreWord(uint16(base), v)
 		}
 	case i.mode == AmRegIndirect:
 		addr := cpu.v(i, i.source)
-		if bw == 1 && i.opcode != Op1Sxt && i.opcode != Op1Swpb {
-			err = cpu.memory.StoreByte(uint16(addr), v&0xff)
+		if i.Byte() { 
+			err = cpu.memory.StoreByte(uint16(addr), uint8(v&0xff))
 		} else {
 			err = cpu.memory.StoreWord(uint16(addr), v)
 		}
 	case i.mode == AmIndirectIncr:
 		addr := cpu.v(i, i.source)
-		if bw == 1 && i.opcode != Op1Sxt && i.opcode != Op1Swpb {
-			err = cpu.memory.StoreByte(uint16(addr), v&0xff)
+		if i.Byte() {
+			err = cpu.memory.StoreByte(uint16(addr), uint8(v&0xff))
 			cpu.regs[i.source] += 1
 		} else {
 			err = cpu.memory.StoreWord(uint16(addr), v)
 			cpu.regs[i.source] += 2
 		}
 	default:
-		panic("unknown addressing mode")
+		return errors.New("unknown/invalid source addressing mode")
 	}
 
 	return err
 }
 
-func (cpu *CPU) dst_operand(i *Insn) (retv int32, err error) {
+func (cpu *CPU) dst_operand(i *Insn) (retv uint16, err error) {
 	err = nil
+	var (
+		v uint16
+		x uint8
+	)
+
 	switch {
-	case i.mode == AmRegDirect:
-		if i.destination == 3 {
-			v = cpu.cg2(i)
+	case i.dstMode == AmAbsolute:
+		if i.Byte() { 
+			x, err = cpu.memory.LoadByte(uint16(i.dstx))
+			v = uint16(x)
 		} else {
-			v = cpu.regs[i.destination]
+			v, err = cpu.memory.LoadWord(uint16(i.dstx))
+		}
+
+		if err != nil {
+			return 0, err
+		}
+
+		return uint16(cpu.bw_eval(i, int32(x))), nil
+	case i.dstMode == AmRegDirect:
+		if i.destination == 3 {
+			retv = uint16(i.cg2v())
+		} else {
+			retv = cpu.regs[i.destination]
 		}
 		
-		v = cpu.bw_eval(i, v)
-		return v, nil
-	case i.mode == AmIndexed:
+		retv = uint16(cpu.bw_eval(i, int32(retv)))
+		return 
+	case i.dstMode == AmIndexed:
 		base := cpu.v(i, i.destination)
 		base += int32(i.dstx)
-		v, err := cpu.memory.LoadWord(uint16(base))
-		return bw_eval(i, v), err
+	
+		if i.Byte() {
+			x, err = cpu.memory.LoadByte(uint16(base))
+			v = uint16(x)
+		} else {
+			v, err = cpu.memory.LoadWord(uint16(base))
+		}
+
+		retv = uint16(cpu.bw_eval(i, int32(v)))
+		return retv, err
 	default:
-		panic("unknown addressing mode")
+		return 0, errors.New("unknown addressing mode")
 	}
 
 	// notreached
-	return nil, nil
+	return 0, nil
 }
 
 
 func (cpu *CPU) dst_operand_store(i *Insn, v uint16) (err error) {
 	err = nil
+
+	fmt.Printf("%v <- %v\n", i.destination, v)
+
 	switch {
-	case i.mode == AmRegDirect:
+	case i.dstMode == AmAbsolute:
+		if i.Byte() { 
+			return cpu.memory.StoreByte(uint16(i.dstx), uint8(v))
+		} else {
+			return cpu.memory.StoreWord(uint16(i.dstx), uint16(v))
+		}
+	case i.dstMode == AmRegDirect:
 		if i.source == 2 || i.source == 3 {
 			err = newError(E_BadOperand, "can't store to CG2 or SR")
 		} else {
-			bw_store(i, i.destination, v)
+			cpu.bw_store(i, i.destination, v)
 		}
-	case i.mode == AmIndexed:
+	case i.dstMode == AmIndexed:
 		addr := cpu.v(i, i.destination) + int32(i.dstx)
 
-		if bw == 1 && i.opcode != Op1Sxt && i.opcode != Op1Swpb {
-			err = cpu.memory.StoreByte(uint16(addr), v) 
+		if i.Byte() { 
+			err = cpu.memory.StoreByte(uint16(addr), uint8(v))
 		} else { 
 			err = cpu.memory.StoreWord(uint16(addr), v) // .b
 		}
 	default:
-		panic("unknown addressing mode")
+		return errors.New("unknown addressing mode")
 	}
 	return
 }
@@ -526,7 +735,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		}
 
 		if jmp == true {
-			cpu.regs[0] += i.offset 
+			cpu.regs[0] += uint16(i.offset)
 		}
 	} else {
 		var src, dst, tmp uint16
@@ -535,7 +744,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		case ItSingleOperand:
 			// S1: LOAD
 
-			if v, err = cpu.src_operand(i); err != nil {
+			if src, err = cpu.src_operand(i); err != nil {
 				return
 			}
 
@@ -579,7 +788,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 			case Op1Push: 
 				cpu.regs[1] -= 2
 				if i.Byte() {
-					cpu.memory.StoreByte(cpu.regs[1], src)
+					cpu.memory.StoreByte(cpu.regs[1], uint8(src))
 				} else {
 					cpu.memory.StoreWord(cpu.regs[1], src)
 				}
@@ -659,9 +868,15 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 			cpu.src_operand_store(i, tmp)
 
 		case ItDoubleOperand:
-			var src, dst, tmp uint16
-
 			// S1 LOAD
+
+			if src, err = cpu.src_operand(i); err != nil {
+				return
+			}
+
+			if dst, err = cpu.dst_operand(i); err != nil {
+				return
+			}
 
 			// S2 EVAL
 
@@ -672,6 +887,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				} else {
 					tmp = src
 				}
+
 			case Op2Add:
 				if i.Byte() {
 					x := uint8(src) + uint8(dst)
@@ -706,7 +922,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 					x := uint8(dst) + uint8((^src)+1) + uint8(cpu.S_C())
 					tmp = uint16(x)
 				} else {
-					tmp = dst + ((^src) + 1) + cpu.S_C()
+					tmp = dst + ((^src) + 1) + uint16(cpu.S_C())
 				}
 			case Op2Dadd:
 				// NOT IMPLEMENTED
@@ -745,13 +961,13 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				if i.Byte() { 
 					if int32(src) + int32(dst) > 0xff {	
 						cpu.set_C(1)
-					} else
+					} else {
 						cpu.set_C(0)
 					}
 				} else {
 					if int32(src) + int32(dst) > 0xffff {	
 						cpu.set_C(1)
-					} else
+					} else { 
 						cpu.set_C(0)
 					}
 				}		
@@ -805,7 +1021,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				}				
 			case Op2Bit:
 				fallthrough
-			case Op2and:
+			case Op2And:
 				cpu.set_V(0)
 			case Op2Xor:
 				if int16(dst) < 0 && int16(src) < 0 { 
@@ -883,4 +1099,24 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		}
 	}
 	return nil
+}
+
+func (cpu *CPU) Step() (err error) {
+	err = nil
+
+	bytes, err := cpu.memory.Load6Bytes(cpu.Pc())
+	if err != nil {
+		return
+	}
+
+	i, err := Disassemble(bytes)
+	if err != nil {
+		return 
+	}
+
+	err = cpu.Execute(&i)
+
+	cpu.regs[0] += uint16(i.width)
+
+	return err
 }
