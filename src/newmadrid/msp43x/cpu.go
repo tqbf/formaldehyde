@@ -86,6 +86,7 @@ const (
 	E_BadOperand
 	E_AddressTooHigh
 	E_AddressUnaligned
+	E_Halted
 )
 
 type CpuError struct {
@@ -102,10 +103,14 @@ func (i *Insn) Byte() bool {
 		case Op1Rra:
 			fallthrough
 		case Op1Push:
-			return true
+			if i.bw != 0 {
+				return true
+			}
 		}
 	case ItDoubleOperand:
-		return true
+		if i.bw != 0 {
+			return true
+		}
 	}
 	return false
 }
@@ -326,6 +331,14 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 		}
 
+		if i.mode == AmIndexed && i.source == 2 {
+			i.mode = AmAbsolute
+		}
+
+		if i.dstMode == AmIndexed && i.destination == 2 {
+			i.dstMode = AmAbsolute
+		}
+
 		if isConstant(&i) {
 			i.mode = constantMode(&i)
 		}
@@ -338,9 +351,22 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 func mode_string(mode addrMode, reg int4, ext int16) (src string) {
 	src = "???"
-	
-	if mode == AmImmediate {
+
+	switch mode {
+	case AmImmediate:
 		return fmt.Sprintf("#%d", ext)
+	case AmConst8:
+		return fmt.Sprintf("#8")
+	case AmConst4:
+		return fmt.Sprintf("#4")
+	case AmConst2:
+		return fmt.Sprintf("#2")
+	case AmConst1:
+		return fmt.Sprintf("#1")
+	case AmConst0:
+		return fmt.Sprintf("#0")
+	case AmConstNeg1:
+		return fmt.Sprintf("#-1")
 	}
 
 	if reg != 3 {
@@ -388,9 +414,15 @@ func (cpu CPU) String() string {
 func (i Insn) String() string {
 	var buf bytes.Buffer
 
-	for k := 0; k < len(i.raw); k++ {
-		buf.WriteString(fmt.Sprintf("%0.2x ", i.raw[k]))
+	for k := 0; k < 6; k++ {
+		if k < len(i.raw) {
+			buf.WriteString(fmt.Sprintf("%0.2x ", i.raw[k]))
+		} else {
+			buf.WriteString("   ")
+		}
 	}
+
+	buf.WriteString("\t")
 
 	bytestr := func(i *Insn) string {
 		if i.Byte() {
@@ -517,7 +549,20 @@ func (cpu *CPU) src_operand(i *Insn) (uint16, error) {
 	case i.mode == AmIndexed:
 		base := cpu.v(i, i.source)
 		base += int32(i.srcx)
-		v, err := cpu.memory.LoadWord(uint16(base))
+
+		var (
+			v uint16
+			err error
+			x uint8
+		)
+
+		if i.Byte() { 
+			x, err = cpu.memory.LoadByte(uint16(base))
+			v = uint16(x)
+		} else {
+			v, err = cpu.memory.LoadWord(uint16(base))
+		}
+
 		return uint16(cpu.bw_eval(i, int32(v))), err
 	case i.mode == AmRegIndirect:
 		addr := cpu.v(i, i.source)
@@ -668,8 +713,6 @@ func (cpu *CPU) dst_operand(i *Insn) (retv uint16, err error) {
 func (cpu *CPU) dst_operand_store(i *Insn, v uint16) (err error) {
 	err = nil
 
-	fmt.Printf("%v <- %v\n", i.destination, v)
-
 	switch {
 	case i.dstMode == AmAbsolute:
 		if i.Byte() { 
@@ -735,6 +778,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		}
 
 		if jmp == true {
+			fmt.Println("")
 			cpu.regs[0] += uint16(i.offset)
 		}
 	} else {
@@ -797,6 +841,7 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				cpu.regs[1] -= 2
 				cpu.memory.StoreWord(cpu.regs[1], cpu.regs[0])
 				cpu.regs[0] = src
+				fmt.Println("")
 
 			case Op1Reti:
 				panic("Not implemented RETI")
@@ -865,7 +910,14 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		
 			// S4 STORE
 
-			cpu.src_operand_store(i, tmp)
+			switch i.opcode {
+			case Op1Push:
+			case Op1Call:
+			case Op1Reti:
+				// these don't do anything
+			default:
+				cpu.src_operand_store(i, tmp)
+			}
 
 		case ItDoubleOperand:
 			// S1 LOAD
@@ -1098,6 +1150,11 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 			}
 		}
 	}
+
+	if cpu.Sr() & 16 != 0 {
+		return newError(E_Halted, "CPUOFF set")
+	}
+
 	return nil
 }
 
@@ -1114,9 +1171,9 @@ func (cpu *CPU) Step() (err error) {
 		return 
 	}
 
-	err = cpu.Execute(&i)
-
 	cpu.regs[0] += uint16(i.width)
 
+	err = (*cpu).Execute(&i)
+
 	return err
-}
+}	

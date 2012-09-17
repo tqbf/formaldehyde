@@ -32,15 +32,22 @@ func (mem *SimpleMemory) LoadWord(address uint16) (uint16, error) {
 
 	}
 
-	return uint16(int(mem.raw[address+1]<<8)|int(mem.raw[address])), nil
-	
+	// here marks the spot where golang's integer type system fucked me.
+	ret := uint16(int(int(mem.raw[address+1])<<8)|int(mem.raw[address]))
+	return ret, nil
 }
 
 func (mem *SimpleMemory) StoreWord(address uint16, value uint16) error {
-	mem.raw[address+1] = byte(value>>8&0xff)
-	mem.raw[address] = byte(value&0xff)
-	return nil
+	switch address {
+	case 0x5ce:
+		fmt.Printf("%c", value)
+	
+	default:
+		mem.raw[address+1] = byte(value>>8&0xff)
+		mem.raw[address] = byte(value&0xff)
+	}
 
+	return nil
 }
 
 func (mem *SimpleMemory) LoadByte(address uint16) (uint8, error) {
@@ -48,7 +55,12 @@ func (mem *SimpleMemory) LoadByte(address uint16) (uint8, error) {
 }
 
 func (mem *SimpleMemory) StoreByte(address uint16, value uint8) error {
-	mem.raw[address] = byte(value);
+	switch address {
+	case 0x5ce:
+		fmt.Printf("%c", value)
+	default:
+		mem.raw[address] = byte(value);
+	}
 	return nil	
 }
 
