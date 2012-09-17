@@ -278,6 +278,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 		switch {
 		case isConstant(&i) == false && i.as == 1 && i.ad == 1:
+			fmt.Println("1111")
 			if cap(raw) < 6 {
 				err = newError(E_TooShort, "missing src and dst index words")
 				return
@@ -289,15 +290,6 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 		case isConstant(&i) && i.ad == 1:
 			fallthrough
-
-		case i.ad == 1:
-			if cap(raw) < 4 {
-				err = newError(E_TooShort, "missing dst index word")
-				return
-			}
-
-			i.dstx = int16(int(raw[3])<<8 | int(raw[2]))
-			i.Width = 4
 
 		case isConstant(&i) == false && i.as == 1:
 			if cap(raw) < 4 {
@@ -328,6 +320,15 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.Width = 4
 			i.mode = AmImmediate
+
+		case i.ad == 1:
+			if cap(raw) < 4 {
+				err = newError(E_TooShort, "missing dst index word")
+				return
+			}
+
+			i.dstx = int16(int(raw[3])<<8 | int(raw[2]))
+			i.Width = 4
 
 		}
 
