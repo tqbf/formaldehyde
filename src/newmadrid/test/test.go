@@ -20,13 +20,14 @@ func ddd() int {
 
 type devent map[uint16]bool
 
-func setup(ca, cb, ma, mb, sa, db devent) {
+func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
 	cbfs := flag.String("C", "", "dump cpu before/after XXXXh")
 	cafs := flag.String("c", "", "dump cpu after")
 	mbfs := flag.String("M", "", "dump memory before/after")
 	mafs := flag.String("m", "", "dump memory after")
 	safs := flag.String("s", "", "sleep 2 seconds after")
 	dbfs := flag.String("d", "", "debug break before")
+	flag.BoolVar(istream, "i", false, "print instruction stream")
 
 	flag.Parse()
 
@@ -61,6 +62,8 @@ func main() {
 	// 		"\x36\x43",
 	// 	}
 
+	istream := false
+
 	cpu_afters := make(devent)
 	cpu_brackets := make(devent)
 	memory_afters := make(devent)
@@ -68,7 +71,7 @@ func main() {
 	sleep_afters := make(devent)
 	debug_befores := make(devent)
 
-	setup(cpu_afters, cpu_brackets, memory_afters, memory_brackets, sleep_afters, debug_befores)
+	setup(cpu_afters, cpu_brackets, memory_afters, memory_brackets, sleep_afters, debug_befores, &istream)
 
 	var cpu msp43x.CPU
 	var mem msp43x.SimpleMemory
@@ -122,13 +125,17 @@ func main() {
 		maybe_cpu(&cpu, cpu_brackets, cur)
 		maybe_memory(&mem, memory_brackets, cur)
 
-		if false {
+		if istream {
 			fmt.Printf("%0.4x\t\t%v\n", cpu.Pc(), insn)
 		}
 
 		if err = cpu.Step(); err != nil {
 			log.Fatal("exec insn: ", err)
 		}
+
+		if istream && cpu.Pc() != (cur + uint16(insn.Width)) {
+			fmt.Println("")
+		}		
 
 		maybe_cpu(&cpu, cpu_brackets, cur)
 		maybe_memory(&mem, memory_brackets, cur)

@@ -76,7 +76,7 @@ type Insn struct {
 	srcx int16
 	dstx int16
 
-	width int
+	Width int
 
 	raw	[]byte
 }
@@ -142,7 +142,7 @@ func interpAs(as int2) (mode addrMode) {
 
 func Disassemble(raw []byte) (i Insn, err error) {
 	i = Insn{
-		width: 2,
+		Width: 2,
 	}
 	err = nil
 
@@ -217,7 +217,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 	 			}
 	 
 	 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
-	 			i.width = 4
+	 			i.Width = 4
 	 
 	 			if i.source == 2 {
 	 				i.mode = AmAbsolute
@@ -228,7 +228,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 	 				return
 	 			}
 	 
-	 			i.width = 4
+	 			i.Width = 4
 	 			i.mode = AmImmediate
 	 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 	 		} 
@@ -285,7 +285,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.dstx = int16(int(raw[5])<<8 | int(raw[4]))
-			i.width = 6
+			i.Width = 6
 
 		case isConstant(&i) && i.ad == 1:
 			fallthrough
@@ -297,7 +297,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			}
 
 			i.dstx = int16(int(raw[3])<<8 | int(raw[2]))
-			i.width = 4
+			i.Width = 4
 
 		case isConstant(&i) == false && i.as == 1:
 			if cap(raw) < 4 {
@@ -306,7 +306,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			}
 
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
-			i.width = 4
+			i.Width = 4
 
 		case i.as == 3 && i.source == 0 && i.ad == 1:
 			if cap(raw) < 6 {
@@ -316,7 +316,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.dstx = int16(int(raw[5])<<8 | int(raw[4]))
-			i.width = 6
+			i.Width = 6
 			i.mode = AmImmediate
 
 		case i.as == 3 && i.source == 0 && i.ad == 0:
@@ -326,7 +326,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			}
 
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
-			i.width = 4
+			i.Width = 4
 			i.mode = AmImmediate
 
 		}
@@ -344,7 +344,7 @@ func Disassemble(raw []byte) (i Insn, err error) {
 		}
 	}
 
-	i.raw = raw[0:i.width]
+	i.raw = raw[0:i.Width]
 
 	return
 }
@@ -721,7 +721,7 @@ func (cpu *CPU) dst_operand_store(i *Insn, v uint16) (err error) {
 			return cpu.memory.StoreWord(uint16(i.dstx), uint16(v))
 		}
 	case i.dstMode == AmRegDirect:
-		if i.source == 2 || i.source == 3 {
+		if i.destination == 3 {
 			err = newError(E_BadOperand, "can't store to CG2 or SR")
 		} else {
 			cpu.bw_store(i, i.destination, v)
@@ -778,7 +778,6 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		}
 
 		if jmp == true {
-			fmt.Println("")
 			cpu.regs[0] += uint16(i.offset)
 		}
 	} else {
@@ -841,7 +840,6 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				cpu.regs[1] -= 2
 				cpu.memory.StoreWord(cpu.regs[1], cpu.regs[0])
 				cpu.regs[0] = src
-				fmt.Println("")
 
 			case Op1Reti:
 				panic("Not implemented RETI")
@@ -1171,7 +1169,7 @@ func (cpu *CPU) Step() (err error) {
 		return 
 	}
 
-	cpu.regs[0] += uint16(i.width)
+	cpu.regs[0] += uint16(i.Width)
 
 	err = (*cpu).Execute(&i)
 
