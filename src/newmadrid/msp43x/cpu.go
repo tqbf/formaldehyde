@@ -991,10 +991,10 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				} else {
 					tmp = src ^ dst
 				}
-			case Op2Bit:
-				fallthrough
 			case Op2Bic:
 				src = ^src
+			case Op2Bit:
+				fallthrough
 			case Op2And:
 				if i.Byte() {
 					tmp = uint16(uint8(src) & uint8(dst))
