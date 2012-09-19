@@ -1035,9 +1035,9 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				}
 			case Op2Bit:
 				if tmp == 0 {
-					cpu.set_C(1)
-				} else {
 					cpu.set_C(0)
+				} else {
+					cpu.set_C(1)
 				}
 			case Op2Xor:
 				fallthrough
