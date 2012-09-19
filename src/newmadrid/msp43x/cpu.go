@@ -517,7 +517,7 @@ func (cpu *CPU) bw_store(i *Insn, reg int4, val uint16) {
 		case Op1Swpb, Op1Sxt, Op1Call, Op1Reti:
 			cpu.regs[reg] = val
 		default:
-			cpu.regs[reg] = (cpu.regs[reg] & 0xff00) | (val & 0xff)
+			cpu.regs[reg] = /* (cpu.regs[reg] & 0xff00) | */ (val & 0xff)
 		}
 	} else {
 		cpu.regs[reg] = val
