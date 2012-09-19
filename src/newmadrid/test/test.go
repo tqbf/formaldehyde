@@ -12,6 +12,17 @@ import (
 	"time"
 )
 
+func mustReader(path string) *bufio.Reader { 
+	f, err := os.Open(path)
+	if err != nil {
+		log.Fatal(fmt.Sprintf("open file \"%s\"", path))
+		panic("eek")
+	}
+
+	r := bufio.NewReader(f)
+	return r
+}
+
 // exists solely as an easy place to set a breakpoint
 func ddd() int {
 	i := 0
@@ -20,7 +31,14 @@ func ddd() int {
 
 type devent map[uint16]bool
 
+var (
+	stabs	*msp43x.Stabs
+)
+
 func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
+	stabspath := flag.String("g", "", "path to stabs file")
+	root := flag.String("r", "", "path to source root")
+
 	cbfs := flag.String("C", "", "dump cpu before/after XXXXh")
 	cafs := flag.String("c", "", "dump cpu after")
 	mbfs := flag.String("M", "", "dump memory before/after")
@@ -49,6 +67,21 @@ func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
 	parse(mb, mbfs)
 	parse(sa, safs)
 	parse(db, dbfs)
+
+	if *stabspath != "" {
+		if *root == "" {
+			*root = "/Users/thomas/codebase/msp430" // XXX
+		}
+
+		stabs = &msp43x.Stabs{
+			Root: *root,
+		}
+
+		r := mustReader(fmt.Sprintf("%s/%s", *root, *stabspath))
+		
+		stabs.ReadStabs(r)
+	}
+
 }
 
 func main() {
@@ -75,13 +108,9 @@ func main() {
 
 	var cpu msp43x.CPU
 	var mem msp43x.SimpleMemory
+	var err error
 
-	f, err := os.Open("/tmp/boot.hex")
-	if err != nil {
-		log.Fatal("open ihex file")
-	}
-
-	r := bufio.NewReader(f)
+	r := mustReader("/tmp/boot.hex")
 
 	if err = msp43x.LoadHex(&mem, r); err != nil {
 		log.Fatal("parse ihex: ", err)
@@ -124,6 +153,13 @@ func main() {
 
 		maybe_cpu(&cpu, cpu_brackets, cur)
 		maybe_memory(&mem, memory_brackets, cur)
+
+		if stabs != nil && istream {
+			line := stabs.LineAt(cur)
+			if line != "" {
+				fmt.Println(line)
+			}
+		}
 
 		if istream {
 			fmt.Printf("%0.4x\t\t%v\n", cpu.Pc(), insn)
