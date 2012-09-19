@@ -288,9 +288,6 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			i.dstx = int16(int(raw[5])<<8 | int(raw[4]))
 			i.Width = 6
 
-		case isConstant(&i) && i.ad == 1:
-			fallthrough
-
 		case isConstant(&i) == false && i.as == 1:
 			if cap(raw) < 4 {
 				err = newError(E_TooShort, "missing src index word")
@@ -320,6 +317,10 @@ func Disassemble(raw []byte) (i Insn, err error) {
 			i.srcx = int16(int(raw[3])<<8 | int(raw[2]))
 			i.Width = 4
 			i.mode = AmImmediate
+
+		case isConstant(&i) && i.ad == 1:
+			i.mode = constantMode(&i)
+			fallthrough
 
 		case i.ad == 1:
 			if cap(raw) < 4 {
