@@ -1,5 +1,14 @@
 package msp43x
 
+const (
+	E_TooShort = iota
+	E_BadOperand
+	E_AddressTooHigh
+	E_AddressUnaligned
+	E_Halted
+	E_BadAddressFault
+)
+
 // bits 15:13
 const (
 	ItSingleOperand family = 0
