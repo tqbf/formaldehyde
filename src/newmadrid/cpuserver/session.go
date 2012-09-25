@@ -152,3 +152,7 @@ func decode(raw []byte) (*Sessionkv) {
 
 	return &s
 }
+
+func (self *Sessionkv) Map() map[string]string {
+	return map[string]string(*self)
+}
