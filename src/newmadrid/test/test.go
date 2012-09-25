@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func mustReader(path string) *bufio.Reader { 
+func mustReader(path string) *bufio.Reader {
 	f, err := os.Open(path)
 	if err != nil {
 		log.Fatal(fmt.Sprintf("open file \"%s\"", path))
@@ -32,7 +32,7 @@ func ddd() int {
 type devent map[uint16]bool
 
 var (
-	stabs	*msp43x.Stabs
+	stabs *msp43x.Stabs
 )
 
 func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
@@ -51,7 +51,7 @@ func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
 
 	parse := func(m devent, str *string) {
 		if str != nil && *str != "" {
-			for _, saddr := range strings.Split(*str, ",") { 
+			for _, saddr := range strings.Split(*str, ",") {
 				if addr, err := strconv.ParseInt(saddr, 16, 32); err != nil {
 					log.Printf("can't parse %s: %v", saddr, err)
 				} else {
@@ -60,7 +60,7 @@ func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
 			}
 		}
 	}
-	
+
 	parse(ca, cafs)
 	parse(cb, cbfs)
 	parse(ma, mafs)
@@ -78,7 +78,7 @@ func setup(ca, cb, ma, mb, sa, db devent, istream *bool) {
 		}
 
 		r := mustReader(fmt.Sprintf("%s/%s", *root, *stabspath))
-		
+
 		stabs.ReadStabs(r)
 	}
 
@@ -116,22 +116,20 @@ func main() {
 		log.Fatal("parse ihex: ", err)
 	}
 
-	log.Println(&mem)
-
 	cpu.SetMemory(&mem)
 	cpu.SetRegs([16]uint16{0x4400})
 
 	maybe_cpu := func(cpu *msp43x.CPU, m devent, a uint16) {
 		if m[a] {
 			fmt.Printf("%v\n", cpu)
-		}		
+		}
 	}
 
 	maybe_memory := func(mem *msp43x.SimpleMemory, m devent, a uint16) {
 		if m[a] {
 			log.Println(mem)
 		}
-	}	
+	}
 
 	for {
 		var bytes []byte
@@ -142,7 +140,7 @@ func main() {
 		if debug_befores[cur] {
 			ddd()
 		}
-	
+
 		if bytes, err = mem.Load6Bytes(cur); err != nil {
 			log.Fatal("decode insn: ", err)
 		}
@@ -169,9 +167,13 @@ func main() {
 			log.Fatal("exec insn: ", err)
 		}
 
-		if istream && cpu.Pc() != (cur + uint16(insn.Width)) {
+		if stabs != nil {
+			fmt.Printf("%v\n", cpu)
+		}
+
+		gif istream && cpu.Pc() != (cur+uint16(insn.Width)) {
 			fmt.Println("")
-		}		
+		}
 
 		maybe_cpu(&cpu, cpu_brackets, cur)
 		maybe_memory(&mem, memory_brackets, cur)
