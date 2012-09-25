@@ -19,7 +19,7 @@ func compile(path string, haml string) (err error) {
 			rebuild := true
 
 			if rawinfo, err = os.Stat(raw); err == nil {
-				if rawinfo.ModTime().Before(info.ModTime()) {
+				if rawinfo.ModTime().After(info.ModTime()) {
 					rebuild = false
 				}
 			}
