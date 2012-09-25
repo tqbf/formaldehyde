@@ -49,11 +49,18 @@ func CpuInterface(templates string) (m *pat.PatternServeMux) {
 	}));
 
 	m.Post("/login", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { 
-
+		s := NewSession()
+		s.Map()["name"] = r.Form.Get("name")
+		http.SetCookie(w, &http.Cookie{
+			Name: "S", 
+			Value: string(s.Encode()),
+		})
+		
+		http.Redirect(w, r, "/cpu", 302)		
 	}));
 
 	m.Post("/cpu", mustSession(func(w http.ResponseWriter, r *http.Request, s *Sessionkv) {
-		
+		render(w, "cpu.html", nil)			
 	}))
 	
 	return 
