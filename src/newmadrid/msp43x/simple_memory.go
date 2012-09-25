@@ -5,9 +5,8 @@ import (
 	"fmt"
 )
 
-type SimpleMemory struct {
-	raw	[65536]byte
-}
+// Simplest possible case, memory is just an array of bytes
+type SimpleMemory [65536]byte
 
 func (mem *SimpleMemory) Load6Bytes(address uint16) ([]byte, error) {
 	if address & 1 != 0 {
@@ -19,7 +18,7 @@ func (mem *SimpleMemory) Load6Bytes(address uint16) ([]byte, error) {
 
 	}
 
-	return mem.raw[address:address+6], nil
+	return mem[address:address+6], nil
 }
 
 func (mem *SimpleMemory) LoadWord(address uint16) (uint16, error) {
@@ -33,7 +32,7 @@ func (mem *SimpleMemory) LoadWord(address uint16) (uint16, error) {
 	}
 
 	// here marks the spot where golang's integer type system fucked me.
-	ret := uint16(int(int(mem.raw[address+1])<<8)|int(mem.raw[address]))
+	ret := uint16(int(int(mem[address+1])<<8)|int(mem[address]))
 	return ret, nil
 }
 
@@ -43,15 +42,15 @@ func (mem *SimpleMemory) StoreWord(address uint16, value uint16) error {
 		fmt.Printf("%c", value)
 	
 	default:
-		mem.raw[address+1] = byte(value>>8&0xff)
-		mem.raw[address] = byte(value&0xff)
+		mem[address+1] = byte(value>>8&0xff)
+		mem[address] = byte(value&0xff)
 	}
 
 	return nil
 }
 
 func (mem *SimpleMemory) LoadByte(address uint16) (uint8, error) {
-	return uint8(mem.raw[address]), nil
+	return uint8(mem[address]), nil
 }
 
 func (mem *SimpleMemory) StoreByte(address uint16, value uint8) error {
@@ -59,22 +58,24 @@ func (mem *SimpleMemory) StoreByte(address uint16, value uint8) error {
 	case 0x5ce:
 		fmt.Printf("%c", value)
 	default:
-		mem.raw[address] = byte(value);
+		mem[address] = byte(value);
 	}
 	return nil	
 }
 
+// Generates a simple hex dump of memory with consecutive blocks of 0's 
+// elided
 func (mem *SimpleMemory) String() string {
 	var buf bytes.Buffer
 
-	buf.WriteString(fmt.Sprintf("mem @ %p/%p\n", mem, &(mem.raw)))
+	buf.WriteString(fmt.Sprintf("mem @ %p/%p\n", mem, &(mem)))
 
 	last_blank := false
 	for i := 0; i < 0x10000; i += 16 {
 		blank := true
 
 		for q := 0; q < 16; q++ {
-			if mem.raw[i + q] != 0 {
+			if mem[i + q] != 0 {
 				blank = false
 				break
 			}
@@ -91,13 +92,13 @@ func (mem *SimpleMemory) String() string {
 		buf.WriteString(fmt.Sprintf("%0.4x  ", i))
 
 		for j := 0; j < 8; j++ {
-			buf.WriteString(fmt.Sprintf("%0.2x ", mem.raw[i + j]))
+			buf.WriteString(fmt.Sprintf("%0.2x ", mem[i + j]))
 		}
 
 		buf.WriteString(" ")
 
 		for j := 0; j < 8; j++ {
-			buf.WriteString(fmt.Sprintf("%0.2x ", mem.raw[i + 8 + j]))			
+			buf.WriteString(fmt.Sprintf("%0.2x ", mem[i + 8 + j]))			
 		}
 
 		buf.WriteString("\n")
