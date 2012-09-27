@@ -22,15 +22,41 @@ func main() {
 	 	if m == nil { 
 	 		log.Fatal("replug target[:port[@lport]]")		
 	 	} 
+
+		ptls := func(s string) (int, error, bool)  {
+			if s[0] == '+' {
+				p, e := strconv.ParseInt(s[1:], 0, 32)
+				return int(p), e, true
+			} 
+
+			p, e := strconv.ParseInt(s[0:], 0, 32)
+			return int(p), e, false
+		}
 	 
 	 	host := string(m[1])
-	 	port, _ := strconv.ParseInt(string(m[2]), 0, 32)
-	 	lport := port
-	 	if len(m) > 2 {
-	 		lport, _ = strconv.ParseInt(string(m[3]), 0, 32)
-	 	}
+
+		var (
+			port, lport int
+			err error
+			tls, ltls bool
+		)
+
+		port, err, tls = ptls(string(m[2]))
+		if err != nil {
+			log.Fatal("can't parse outgoing port: ", err)
+		}
+
+		if len(m) > 2 {
+			lport, err, ltls = ptls(string(m[3]))
+			if err != nil { 
+				log.Fatal("can't parse incoming port: ", err)
+			}
+		} else {
+			lport = port
+			ltls = tls
+		}
 	 	
-	 	r, e := blackbag.NewReplug(host, int(port), int(lport))
+	 	r, e := blackbag.NewReplug(host, int(port), tls, int(lport), ltls)
 	 	if e != nil {
 	 		log.Fatal("Bind: ", e)
 	 	}

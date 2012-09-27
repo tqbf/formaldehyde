@@ -9,19 +9,23 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"crypto/tls"
 )
 
 type Replug struct {
 	Host	string
 	Port	int
 	Lport	int
-	
+
+	ltls	bool
+	rtls	bool	
+
 	srv	net.Listener
 
 	Wait	chan bool
 }
 
-func NewReplug(host string, port, lport int) (Replug, error) {
+func NewReplug(host string, port int, tls bool, lport int, ltls bool) (Replug, error) {
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", lport))
 	if err != nil {
 		return Replug{}, err
@@ -31,6 +35,8 @@ func NewReplug(host string, port, lport int) (Replug, error) {
 		Host: host,
 		Port: port,
 		Lport: lport,
+		ltls: ltls,
+		rtls: tls,
 		srv: l,
 		Wait: make(chan bool),
 	}, nil
@@ -73,7 +79,21 @@ func (self *Replug) Loop() {
 
 			canlog := sync.Mutex{}
 
-			outgoing, err := net.Dial("tcp", fmt.Sprintf("%s:%d", self.Host, self.Port))		
+			var (
+				outgoing net.Conn
+				err error
+			)	
+
+			if self.rtls {
+				conf := tls.Config{
+					InsecureSkipVerify: true,
+				}
+
+				outgoing, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", self.Host, self.Port), &conf)		
+			} else {
+				outgoing, err = net.Dial("tcp", fmt.Sprintf("%s:%d", self.Host, self.Port))		
+			}
+
 			if err == nil {
 				log.Printf("[outgoing: %v]\n", outgoing.RemoteAddr())
 
