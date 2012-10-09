@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func compile(path string, haml string) (err error) {
@@ -86,16 +87,38 @@ func wireStatics(path string) {
 func main() {
 	vroot := flag.String("root", "data/newmadrid/views", "Path to HTML/JS templates")
 	haml := flag.String("haml", "/usr/bin/haml", "Path to Haml command")
+	redis := flag.String("redis", "localhost:6379", "server:port redis connection")
 
 	flag.Parse()
 
 	if err := compile(*vroot, *haml); err != nil {
 		log.Fatal(err)
-	}
+	}	
 
 	wireStatics(*vroot)
 
-	http.Handle("/", CpuInterface(*vroot))
+	redisLand, err := NewRedisLand(*redis)
+	if err != nil {
+		log.Fatal("redis connect: ", err)
+	}
+
+	go redisLand.Loop()
+	go CpuController(redisLand)
+
+	go func() {
+		for {
+			redisLand.Comm <- func(r *RedisLand) { 
+				res, err := r.Conn.Do("GET", "flabbledy")
+				if err == nil && res != nil {
+					fmt.Println(string(res.([]byte)))
+				}
+			}
+
+			time.Sleep(2500 * time.Millisecond)
+		}
+	}()
+
+	http.Handle("/", CpuInterface(*vroot, redisLand))
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
