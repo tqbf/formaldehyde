@@ -63,6 +63,16 @@ func (mem *SimpleMemory) StoreByte(address uint16, value uint8) error {
 	return nil	
 }
 
+func (mem *SimpleMemory) Read(address uint16, len uint16) ([]byte, error) {
+	fmt.Println(address, " ", len)
+
+	if (address + len) < address {
+		return nil, newError(E_AddressTooHigh, "read address would wrap")
+	}
+
+	return mem[address:address+len], nil
+}
+
 // Generates a simple hex dump of memory with consecutive blocks of 0's 
 // elided
 func (mem *SimpleMemory) String() string {

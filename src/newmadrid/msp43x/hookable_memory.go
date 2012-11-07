@@ -26,6 +26,12 @@ type HookableMemory struct {
 	write_hooks	map[uint16]WriteHook
 }
 
+func NewHookableMemory(mem *SimpleMemory) *HookableMemory { 
+	return &HookableMemory{
+		mem: *mem,
+	}
+}
+
 // Assign a hook to a specific word in memory; note that this hook will be 
 // called for both bytes and words (which means you can't have one hook handle
 // both kinds)
@@ -40,47 +46,51 @@ func (mem *HookableMemory) WriteHook(addr uint16, h WriteHook) {
 	mem.write_hooks[addr] = h
 }
 
-func (mem *HookableMemory) Load6Bytes(address uint16) ([]byte, error) {
-	if _, ok := mem.read_hooks[address]; ok {
+func (self *HookableMemory) Load6Bytes(address uint16) ([]byte, error) {
+	if _, ok := self.read_hooks[address]; ok {
 		return nil, newError(E_BadAddressFault, "can't load instruction from addr")
 	}
 
-	return mem.Load6Bytes(address)
+	return self.mem.Load6Bytes(address)
 }
 
-func (mem *HookableMemory) LoadWord(address uint16) (uint16, error) {
-	if hook, ok := mem.read_hooks[address]; ok {
-		return hook.ReadMemory(address, mem)
+func (self *HookableMemory) LoadWord(address uint16) (uint16, error) {
+	if hook, ok := self.read_hooks[address]; ok {
+		return hook.ReadMemory(address, self)
 	}
 
-	return mem.LoadWord(address)
+	return self.mem.LoadWord(address)
 }
 
-func (mem *HookableMemory) LoadByte(address uint16) (uint8, error) {
-	if hook, ok := mem.read_hooks[address]; ok {
-		i, e := hook.ReadMemory(address, mem)
+func (self *HookableMemory) LoadByte(address uint16) (uint8, error) {
+	if hook, ok := self.read_hooks[address]; ok {
+		i, e := hook.ReadMemory(address, self)
 		return uint8(i & 0xff), e
 	}
 
-	return mem.LoadByte(address)
+	return self.mem.LoadByte(address)
 }
 
-func (mem *HookableMemory) StoreWord(address uint16, value uint16) error {
-	if hook, ok := mem.write_hooks[address]; ok {
-		return hook.WriteMemory(address, value, mem)
+func (self *HookableMemory) StoreWord(address uint16, value uint16) error {
+	if hook, ok := self.write_hooks[address]; ok {
+		return hook.WriteMemory(address, value, self)
 	}
 
-	return mem.StoreWord(address, value)
+	return self.mem.StoreWord(address, value)
 }
 
-func (mem *HookableMemory) StoreByte(address uint16, value uint8) error {
-	if hook, ok := mem.write_hooks[address]; ok {
-		return hook.WriteMemory(address, uint16(value), mem)
+func (self *HookableMemory) StoreByte(address uint16, value uint8) error {
+	if hook, ok := self.write_hooks[address]; ok {
+		return hook.WriteMemory(address, uint16(value), self)
 	}
 
-	return mem.StoreByte(address, value)
+	return self.mem.StoreByte(address, value)
 }
 
-func (mem *HookableMemory) String() string {
-	return mem.String()
+func (self *HookableMemory) String() string {
+	return self.mem.String()
+}
+
+func (self *HookableMemory) Read(address uint16, len uint16) ([]byte, error) {
+	return self.mem.Read(address, len)
 }

@@ -1,14 +1,16 @@
 package main
 
 import (
-	"log"
-	"io/ioutil"
-	"fmt"
 	"bytes"
-	"net/http"
+	"encoding/json"
+	"fmt"
+	"newmadrid/msp43x"
 	"github.com/bmizerany/pat"
 	"html/template"
-	"encoding/json"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"strconv"
 )
 
 type sessionHandler func(w http.ResponseWriter, r *http.Request, s *Sessionkv)
@@ -17,35 +19,35 @@ type cpuHandler func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *Us
 func mustCpu(handler cpuHandler) http.HandlerFunc {
 	return mustSession(func(w http.ResponseWriter, r *http.Request, s *Sessionkv) {
 		cpu := GetCpu(s.Map()["name"])
-		handler(w, r, s, cpu)		
+		handler(w, r, s, cpu)
 	})
 }
 
-func mustSession(handler sessionHandler) http.HandlerFunc { 
-	return func(w http.ResponseWriter, r *http.Request) { 
+func mustSession(handler sessionHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		var ses *Sessionkv
 
-		for _, c := range r.Cookies() { 
+		for _, c := range r.Cookies() {
 			if c.Name == "S" {
 				ses = RestoreSession([]byte(c.Value))
 				break
 			}
 		}
 
-		if ses == nil { 
+		if ses == nil {
 			if name := r.URL.Query().Get(":name"); name != "" {
 				ses = NewSession()
 				ses.Map()["name"] = name
 				handler(w, r, ses)
-			} else {			
+			} else {
 				http.Redirect(w, r, "/login", 302)
 			}
 		} else {
 			h := ses.Hash()
 			handler(w, r, ses)
-			if bytes.Compare(h, ses.Hash()) != 0 { 			
+			if bytes.Compare(h, ses.Hash()) != 0 {
 				http.SetCookie(w, &http.Cookie{
-					Name: "S",
+					Name:  "S",
 					Value: string(ses.Encode()),
 				})
 			}
@@ -56,55 +58,54 @@ func mustSession(handler sessionHandler) http.HandlerFunc {
 func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 	m = pat.New()
 
-	render := func(w http.ResponseWriter, name string, data interface{} ) {
+	render := func(w http.ResponseWriter, name string, data interface{}) {
 		t := template.Must(template.ParseFiles(fmt.Sprintf("%s/%s", templates, name)))
 		t.Execute(w, data)
 	}
 
-	m.Get("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { 
-		http.Redirect(w, r, "/cpu", 302)		
-	}));
+	m.Get("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/cpu", 302)
+	}))
 
-	m.Get("/login", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { 
+	m.Get("/login", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		render(w, "login.html", nil)
-	}));
+	}))
 
-	m.Post("/login", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { 
+	m.Post("/login", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s := NewSession()
 		s.Map()["name"] = r.FormValue("name")
 
 		http.SetCookie(w, &http.Cookie{
-			Name: "S", 
+			Name:  "S",
 			Value: string(s.Encode()),
 		})
-		
-		http.Redirect(w, r, "/cpu", 302)		
+
+		http.Redirect(w, r, "/cpu", 302)
 	}))
 
-	m.Post("/logout", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { 
+	m.Post("/logout", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
-			Name: "S",
-			MaxAge: -1, 
-			Value: "",
+			Name:   "S",
+			MaxAge: -1,
+			Value:  "",
 		})
-		
-		http.Redirect(w, r, "/login", 302)		
+
+		http.Redirect(w, r, "/login", 302)
 	}))
 
 	m.Get("/cpu/:name", mustSession(func(w http.ResponseWriter, r *http.Request, s *Sessionkv) {
 		type response struct {
 			Name string
-			Cpu interface{}
+			Cpu  interface{}
 		}
 
 		cpu := GetCpu(s.Map()["name"])
 
 		render(w, "cpu.html", response{
 			Name: s.Map()["name"],
-			Cpu: cpu.MCU,
-		})			
+			Cpu:  cpu.MCU,
+		})
 	}))
-
 
 	type RegsData struct {
 		Regs [16]int `json:"regs"`
@@ -114,20 +115,22 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		Data RegsData `json:"data"`
 	}
 
+	type Result struct {
+		Data interface{} `json:"data"`
+	}
+
 	m.Get("/cpu/:name/regs_form", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
-		render(w, "regs.html", struct{
+		render(w, "regs.html", struct {
 			Regs [16]uint16
-		}{ c.MCU.GetRegs() })			
+		}{c.MCU.GetRegs()})
 	}))
 
 	m.Get("/cpu/:name/regs", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		var regsout [16]int
 
-		for i, v := range(c.MCU.GetRegs()) {
+		for i, v := range c.MCU.GetRegs() {
 			regsout[i] = int(v)
 		}
-
-		log.Println(c.MCU.GetRegs())
 
 		log.Printf("-> %p\n", c.MCU)
 
@@ -141,41 +144,39 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 	}))
 
 	type requestResult struct {
-		success bool
-		data string
+		success bool   `json:"success"`
+		data    string `json:"data"`
 	}
 
 	m.Get("/cpu/:name/state", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
-		result := &requestResult{
-			success: true,
-			data:"",
-		}
-
 		complete := make(chan int)
 
-		c.Comm <- func(c *UserCpu) { 
+		c.Comm <- func(c *UserCpu) {
 			complete <- c.State
 		}
-	
-		res := <- complete
-		result.data = fmt.Sprintf("%d", res)	
-		out, _ := json.Marshal(result)
-		fmt.Fprintf(w, "%s", string(out))		
+
+		res := <-complete
+
+		out, _ := json.Marshal(&map[string]interface{}{
+			"data": &map[string]interface{}{
+				"state":    fmt.Sprintf("%d", res),
+			},
+		})
+		fmt.Fprintf(w, "%s", string(out))
 	}))
 
 	m.Post("/cpu/:name/regs", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
-		complete := make(chan bool)
-
 		result := &requestResult{
 			success: true,
-			data: "",
+			data:    "",
 		}
 		parsed := &RegsTop{}
 		body, err := ioutil.ReadAll(r.Body)
 		if err == nil {
 			err = json.Unmarshal(body, &parsed)
 			if err == nil {
-				c.Comm <- func(c *UserCpu) { 
+				complete := make(chan bool)
+				c.Comm <- func(c *UserCpu) {
 					regs := c.MCU.GetRegs()
 
 					for i := 0; i < 16; i++ {
@@ -183,34 +184,42 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 							regs[i] = uint16(parsed.Data.Regs[i])
 						}
 					}
-		
+
 					c.MCU.SetRegs(regs)
 					complete <- true
 				}
+				result.success = <-complete
 			}
 		}
 
-		result.success =<- complete
-		out, _ := json.Marshal(result)
-		fmt.Fprintf(w, "%s", string(out))		
+		out, _ := json.Marshal(&map[string]interface{}{
+			"data": &map[string]interface{}{
+				"success": true,
+				"data":    "",
+			},
+		})
+		fmt.Fprintf(w, "%s", string(out))
 	}))
 
 	m.Post("/cpu/:name/load", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		type loadRequest struct {
-			key string
+			Key string `json:"key"`
+		}
+		type wrapper struct {
+			Data loadRequest `json:"data"`
 		}
 
-		parsed := &loadRequest{}
+		parsed := &wrapper{}
 		result := &requestResult{
 			success: false,
-			data: "",
+			data:    "",
 		}
-		
+
 		body, err := ioutil.ReadAll(r.Body)
 		if err == nil {
 			err = json.Unmarshal(body, &parsed)
 			if err == nil {
-				err = c.LoadHexFromRedis(parsed.key)
+				err = c.LoadHexFromRedis(parsed.Data.Key)
 			}
 		}
 
@@ -220,63 +229,174 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 			result.success = true
 		}
 
-		out, _ := json.Marshal(result)
+		out, _ := json.Marshal(&map[string]interface{}{
+			"data": &map[string]interface{}{
+				"success": result.success,
+			},
+		})
 		fmt.Fprintf(w, "%s", string(out))
 	}))
+
+	m.Get("/cpu/:name/memory/:address", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+		var (
+			addrs, lens string
+			addr, len   int64
+			raw         []byte
+			err         error
+		)
+
+		addrs = r.URL.Query().Get(":address")
+		if addrs != "" {
+			addr, err = strconv.ParseInt(addrs, 16, 32)
+			if err == nil {
+				lens = r.URL.Query().Get("len")
+				if lens == "" {
+					lens = "32"
+				}
+
+				len, err = strconv.ParseInt(lens, 0, 32)
+				if err == nil {
+					complete := make(chan bool)		
+					c.Comm <- func(c *UserCpu) { 
+						raw, err = c.Mem.Read(uint16(addr), uint16(len))
+						complete <- true
+					}
+					<- complete
+				}
+			}
+		}
+
+		out, _ := json.Marshal(&map[string]interface{} {
+			"error": err,
+			"raw": raw,
+		})
+		fmt.Fprintf(w, "%s", string(out))		
+
+	}))
+
+	m.Get("/cpu/:name/memory/:address/insns", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+		var (
+			addrs, cs string
+			addr, cnt   int64
+			err         error
+		)
+
+		insns := make([]string, 0, 10)			
+
+		addrs = r.URL.Query().Get(":address")
+		if addrs != "" {
+			addr, err = strconv.ParseInt(addrs, 16, 32)
+			if err == nil {
+				cs = r.URL.Query().Get("count")
+				if cs == "" {
+					cs = "10";
+				}
+
+				cnt, err = strconv.ParseInt(cs, 0, 32)
+				if err == nil {
+					if cnt > 100 || cnt < 0 {
+						cnt = 100
+					}
+
+					complete := make(chan bool)
+					c.Comm <- func(c *UserCpu) { 
+						for i := 0; i < int(cnt); i++ { 
+							bytes, err := c.Mem.Load6Bytes(uint16(addr))
+							if err != nil {
+								break
+							}
+
+							i, err := msp43x.Disassemble(bytes)
+							if err != nil { 
+								break
+							} 
+				
+							insns = append(insns, i.String())
+
+							addr += int64(i.Width)
+						}
+				
+						complete <- true
+					}
+					<- complete
+				}
+			}
+		}
+
+		out, _ := json.Marshal(&map[string]interface{}{
+			"data": &map[string]interface{}{
+				"insns":  insns,
+			},
+		})
+		fmt.Fprintf(w, "%s", string(out))
+	}))
+
 
 	m.Get("/cpu/:name/events", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		type results struct {
 			success bool
-			events map[uint16]int
+			events  map[string]int
 		}
 
-		result := &results{}
+		result := &results{events: make(map[string]int)}
 		complete := make(chan bool)
 
 		c.Comm <- func(c *UserCpu) {
-			result.events = c.Breakpoints
+			for key, value := range c.Breakpoints {
+				result.events[fmt.Sprintf("%x", key)] = value
+			}
 			complete <- true
 		}
 
-		result.success = <- complete
+		result.success = <-complete
 
-		out, _ := json.Marshal(result)
+		out, _ := json.Marshal(&map[string]interface{}{
+			"data": &map[string]interface{}{
+				"success": result.success,
+				"events":  result.events,
+			},
+		})
 		fmt.Fprintf(w, "%s", string(out))
 
 	}))
 
 	m.Post("/cpu/:name/event", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
-	 	type CpuEvent struct {
-	 		Addr	uint16
-	 		Event	int
-	 	}
+		type CpuEvent struct {
+			Addr  uint16
+			Event int
+		}
 
 		parsed := &CpuEvent{}
 		result := &requestResult{
 			success: false,
-			data: "",
+			data:    "",
 		}
-		
+
 		body, err := ioutil.ReadAll(r.Body)
 		if err == nil {
 			err = json.Unmarshal(body, &parsed)
 			if err == nil {
 				complete := make(chan bool)
 
-				c.Comm <- func(c *UserCpu) { 
+				c.Comm <- func(c *UserCpu) {
 					c.Breakpoints[parsed.Addr] = parsed.Event
 					complete <- true
 				}
 
-				result.success = <- complete
+				result.success = <-complete
 			}
 		}
 
 		if err != nil {
 			result.data = fmt.Sprintf("%v", err)
-		} 
+		}
 
-		out, _ := json.Marshal(result)
+		out, _ := json.Marshal(&map[string]interface{}{
+			"data": &map[string]interface{}{
+				"success": result.success,
+				"data":    result.data,
+			},
+		})
 		fmt.Fprintf(w, "%s", string(out))
 	}))
 
@@ -284,19 +404,25 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		return mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 			result := &requestResult{
 				success: true,
-				data: "",
+				data:    "",
 			}
 
 			complete := make(chan bool)
 
-			c.Comm <- func(c *UserCpu) { 
+			c.Comm <- func(c *UserCpu) {
 				c.State = state
 				complete <- true
 			}
 
-			_ = <- complete
-			out, _ := json.Marshal(result)
-			fmt.Fprintf(w, "%s", string(out))
+			_ = <-complete
+
+
+	 		out, _ := json.Marshal(&map[string]interface{}{
+	 			"data": &map[string]interface{}{
+	 				"success": result.success,
+	 			},
+	 		})
+	 		fmt.Fprintf(w, "%s", string(out))
 		})
 	}
 
@@ -304,5 +430,5 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 	m.Post("/cpu/:name/continue", stateSetter(CpuRunning))
 	m.Post("/cpu/:name/stop", stateSetter(CpuStopped))
 
-	return 
+	return
 }

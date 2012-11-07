@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"bufio"
 	"errors"
+	"fmt"
 )
 
 type CpuReq struct {
@@ -51,10 +52,8 @@ func CpuController(redis *RedisLand) {
 	}
 }
 
-func newMemory() *msp43x.HookableMemory {
-	m := new(msp43x.HookableMemory)
-
-	return m
+func newMemory() *msp43x.HookableMemory {	
+	return msp43x.NewHookableMemory(new(msp43x.SimpleMemory))
 }
 
 const (
@@ -96,6 +95,7 @@ func NewUserCpu() (ret *UserCpu) {
 	ret.Mem = newMemory()
 	ret.Image = "boot"
 	ret.State = CpuStopped
+	ret.Comm = make(chan CpuRequest)
 	ret.Breakpoints = make(map[uint16]int)
 
 	return
@@ -108,7 +108,10 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 		c.redis.Comm <- func(r *RedisLand) {
 			res, err := r.Conn.Do("GET", key)	
 			if err == nil && res != nil {
-				if err := msp43x.LoadHex(c.Mem, bufio.NewReader(bytes.NewBuffer(res.([]byte)))); err != nil {
+				raw := res.([]byte)
+				buf := bytes.NewBuffer(raw)
+
+				if err := msp43x.LoadHex(c.Mem, bufio.NewReader(buf)); err != nil {
 					complete <- err
 				} else {
 					complete <- nil
@@ -127,7 +130,9 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 		return
 	}
 
-	return <- complete
+	retval := <- complete
+	fmt.Println("6")
+	return retval
 }
 
 func (ucpu *UserCpu) Loop() {
