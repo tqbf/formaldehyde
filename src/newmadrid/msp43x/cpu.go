@@ -13,7 +13,9 @@ import (
 type Memory interface {
 	Load6Bytes(address uint16) ([]byte, error)
 	LoadWord(address uint16) (uint16, error)
+	LoadWordDirect(address uint16) (uint16, error)
 	StoreWord(address uint16, value uint16) error
+	StoreWordDirect(address uint16, value uint16) error
 	LoadByte(address uint16) (uint8, error)
 	StoreByte(address uint16, value uint8) error
 }
@@ -857,6 +859,8 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 func (cpu *CPU) Step() (err error) {
 	err = nil
 
+//    fmt.Printf("PC: %x\n", cpu.Pc())
+//    fmt.Printf("Mem: %v\n", cpu.memory)
 	bytes, err := cpu.memory.Load6Bytes(cpu.Pc())
 	if err != nil {
 		return
@@ -869,10 +873,13 @@ func (cpu *CPU) Step() (err error) {
 
 	cpu.regs[0] += uint16(i.Width)
 
+    //fmt.Printf("Op: %v\n", i)
+
+
 	err = (*cpu).Execute(&i)
 
 	return err
-}	
+}
 
 func (cpu CPU) String() string {
 	var buffer bytes.Buffer

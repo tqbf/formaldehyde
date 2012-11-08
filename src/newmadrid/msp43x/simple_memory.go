@@ -38,9 +38,8 @@ func (mem *SimpleMemory) LoadWord(address uint16) (uint16, error) {
 
 func (mem *SimpleMemory) StoreWord(address uint16, value uint16) error {
 	switch address {
-	case 0x5ce:
-		fmt.Printf("%c", value)
-	
+//	case 0x5ce:
+//		fmt.Printf("%c", value)
 	default:
 		mem[address+1] = byte(value>>8&0xff)
 		mem[address] = byte(value&0xff)
@@ -55,8 +54,8 @@ func (mem *SimpleMemory) LoadByte(address uint16) (uint8, error) {
 
 func (mem *SimpleMemory) StoreByte(address uint16, value uint8) error {
 	switch address {
-	case 0x5ce:
-		fmt.Printf("%c", value)
+//	case 0x5ce:
+//		fmt.Printf(".%c", value)
 	default:
 		mem[address] = byte(value);
 	}

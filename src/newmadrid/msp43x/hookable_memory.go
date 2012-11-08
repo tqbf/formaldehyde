@@ -1,4 +1,5 @@
 package msp43x
+//import "fmt"
 
 // A read hook can be a function or an object with a "ReadMemory" function
 type ReadHook interface {
@@ -56,9 +57,19 @@ func (self *HookableMemory) Load6Bytes(address uint16) ([]byte, error) {
 	return self.mem.Load6Bytes(address)
 }
 
+// bypasses hooks
+func (self *HookableMemory) LoadWordDirect(address uint16) (uint16, error) {
+	return self.mem.LoadWord(address)
+}
+
 func (self *HookableMemory) LoadWord(address uint16) (uint16, error) {
 	if hook, ok := self.read_hooks[address]; ok {
-		return hook.ReadMemory(address, self)
+		val, err :=  hook.ReadMemory(address, self)
+        // only return the value from the hook if there was no error.
+        if err == nil {
+                return val, err
+        }
+
 	}
 
 	return self.mem.LoadWord(address)
@@ -72,6 +83,12 @@ func (self *HookableMemory) LoadByte(address uint16) (uint8, error) {
 
 	return self.mem.LoadByte(address)
 }
+
+// bypasses hooks
+func (self *HookableMemory) StoreWordDirect(address uint16, value uint16) error {
+	return self.mem.StoreWord(address, value)
+}
+
 
 func (self *HookableMemory) StoreWord(address uint16, value uint16) error {
 	if hook, ok := self.write_hooks[address]; ok {
