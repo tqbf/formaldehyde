@@ -29,6 +29,8 @@ type HookableMemory struct {
 func NewHookableMemory(mem *SimpleMemory) *HookableMemory { 
 	return &HookableMemory{
 		mem: *mem,
+        read_hooks: make(map[uint16]ReadHook),
+        write_hooks: make(map[uint16]WriteHook),
 	}
 }
 
