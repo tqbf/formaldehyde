@@ -140,6 +140,7 @@ func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 	ret = new(UserCpu)
 	ret.MCU = new(msp43x.CPU)
 	ret.Mem = newMemory()
+	ret.MCU.SetMemory(ret.Mem)
 	ret.Image = "boot"
 	ret.State = CpuStopped
 	ret.Comm = make(chan CpuRequest)
