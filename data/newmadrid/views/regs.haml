@@ -1,0 +1,65 @@
+!!!
+%head
+  %script{:type => "text/javascript", :src => "https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"}
+  %script{:type => "text/javascript", :src => "/json2.js"}
+
+%body
+  %form
+    %input#r0{:type => "TEXT", :name => "r0", :value => "{{ index .Regs 0 }}"}
+    %input#r1{:type => "TEXT", :name => "r1", :value => "{{ index .Regs 1 }}"}
+    %input#r2{:type => "TEXT", :name => "r2", :value => "{{ index .Regs 2 }}"}
+    %input#r3{:type => "TEXT", :name => "r3", :value => "{{ index .Regs 3 }}"}
+    %br    
+    %input#r4{:type => "TEXT", :name => "r4", :value => "{{ index .Regs 4 }}"}
+    %input#r5{:type => "TEXT", :name => "r5", :value => "{{ index .Regs 5 }}"}
+    %input#r6{:type => "TEXT", :name => "r6", :value => "{{ index .Regs 6 }}"}
+    %input#r7{:type => "TEXT", :name => "r7", :value => "{{ index .Regs 7 }}"}
+    %br   
+    %input#r8{:type => "TEXT", :name => "r8", :value => "{{ index .Regs 8 }}"}
+    %input#r9{:type => "TEXT", :name => "r9", :value => "{{ index .Regs 9 }}"}
+    %input#ra{:type => "TEXT", :name => "ra", :value => "{{ index .Regs 10 }}"}
+    %input#rb{:type => "TEXT", :name => "rb", :value => "{{ index .Regs 11 }}"}
+    %br   
+    %input#rc{:type => "TEXT", :name => "rc", :value => "{{ index .Regs 12 }}"}
+    %input#rd{:type => "TEXT", :name => "rd", :value => "{{ index .Regs 13 }}"}
+    %input#re{:type => "TEXT", :name => "re", :value => "{{ index .Regs 14 }}"}
+    %input#rf{:type => "TEXT", :name => "rf", :value => "{{ index .Regs 15 }}"}
+    %br
+    %input#update{:type => "SUBMIT", :value => "update"}
+
+  :javascript
+    $(function() { 
+      $("#update").click(function() { 
+        $.ajax({
+          type: 'POST',
+          url: "/cpu/regs",
+          contentType: 'application/json',
+          data: JSON.stringify({
+            data: {
+              regs: [ 
+                parseInt($("#r0").val()),
+                parseInt($("#r1").val()),
+                parseInt($("#r2").val()),
+                parseInt($("#r3").val()),
+                parseInt($("#r4").val()),
+                parseInt($("#r5").val()),
+                parseInt($("#r6").val()),
+                parseInt($("#r7").val()),
+                parseInt($("#r8").val()),
+                parseInt($("#r9").val()),
+                parseInt($("#ra").val()),
+                parseInt($("#rb").val()),
+                parseInt($("#rc").val()),
+                parseInt($("#rd").val()),
+                parseInt($("#re").val()),
+                parseInt($("#rf").val()), ]
+            }
+          })
+        }).done(function(d) { 
+          window.location.replace("/cpu/regs_form");
+        }).fail(function(x, s) {
+          alert(x.statusText);
+        });
+        return false;
+      });
+    })
