@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"strconv"
 	"errors"
+//    "fmt"
 )
 
 func LoadHex(memory Memory, in *bufio.Reader) (err error) {
@@ -46,6 +47,7 @@ func LoadHex(memory Memory, in *bufio.Reader) (err error) {
 				return
 			}	
 
+//            fmt.Printf("Storing %v at addr %x\n", uint8(byte), addr)
 			if err = memory.StoreByte(addr, uint8(byte)); err != nil {
 				return
 			}

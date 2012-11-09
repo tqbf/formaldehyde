@@ -9,6 +9,9 @@ import (
 	"fmt"
 )
 
+
+
+
 type CpuReq struct {
 	Name  string
 	Reply chan *UserCpu
@@ -39,9 +42,7 @@ func CpuController(redis *RedisLand) {
 		)
 
 		if cpu, ok = cpus[req.Name]; !ok {
-			cpu = NewUserCpu()
-			cpu.Name = req.Name
-			cpu.redis = redis
+			cpu = NewUserCpu(req.Name,redis)
 			cpus[req.Name] = cpu
 			go cpu.Loop()
 		}
@@ -81,7 +82,7 @@ type UserCpu struct {
 
 	State int
 
-	redis *RedisLand
+	Redis *RedisLand
 
 	Breakpoints map[uint16]int	
 
@@ -89,7 +90,23 @@ type UserCpu struct {
 
 }
 
-func NewUserCpu() (ret *UserCpu) {
+func (ucpu *UserCpu) SetupDefaultHooks() {
+     // setup PrintChar
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(0x5ce, &WriteUserOutput{
+                 cpu: ucpu,
+                 })
+     }
+
+     // setup user input
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(0x5d2, &ReadUserInputHook{
+                 cpu: ucpu,
+                 })
+     }
+}
+
+func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 	ret = new(UserCpu)
 	ret.MCU = new(msp43x.CPU)
 	ret.Mem = newMemory()
@@ -98,16 +115,21 @@ func NewUserCpu() (ret *UserCpu) {
 	ret.State = CpuStopped
 	ret.Comm = make(chan CpuRequest)
 	ret.Breakpoints = make(map[uint16]int)
+    ret.Name = cpuname
+    ret.Redis = redis
+
 
 	return
 }
 
+
 func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
+    fmt.Println("Loading memory from redis")
 	complete := make(chan error)
 
-	ucpu.Comm <- func(c *UserCpu) { 
-		c.redis.Comm <- func(r *RedisLand) {
-			res, err := r.Conn.Do("GET", key)	
+	ucpu.Comm <- func(c *UserCpu) {
+		c.Redis.Comm <- func(r *RedisLand) {
+			res, err := r.Conn.Do("GET", key)
 			if err == nil && res != nil {
 				raw := res.([]byte)
 				buf := bytes.NewBuffer(raw)
@@ -117,6 +139,7 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 				} else {
 					complete <- nil
 				}
+//                fmt.Println(c.Mem)
 			} else {
 				if err != nil {
 					complete <- err
@@ -142,13 +165,15 @@ func (ucpu *UserCpu) Loop() {
 	for { 
 		if ucpu.State == CpuRunning { 
 			select {
-			case req := <- ucpu.Comm:
+			case req := <-ucpu.Comm:
+                fmt.Println(req)
 				req(ucpu)
 
 			default:
 	 			ucpu.State = CpuRunning
 	 		 	
 	 			cur := cpu.Pc() // PC changes after Step, so remember it.
+//                fmt.Printf("PC: %x\n",cur)
 
 				nowStop := false		
 		 	
