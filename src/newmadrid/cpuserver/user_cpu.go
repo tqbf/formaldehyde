@@ -93,14 +93,44 @@ type UserCpu struct {
 func (ucpu *UserCpu) SetupDefaultHooks() {
      // setup PrintChar
      ucpu.Comm <- func(c *UserCpu) {
-         c.Mem.WriteHook(0x5ce, &WriteUserOutput{
+         c.Mem.WriteHook(M_USER_OUTPUT_BYTE, &WriteUserOutput{
                  cpu: ucpu,
                  })
      }
 
      // setup user input
      ucpu.Comm <- func(c *UserCpu) {
-         c.Mem.WriteHook(0x5d2, &ReadUserInputHook{
+         c.Mem.WriteHook(M_USER_INPUT_BUF_LENGTH, &ReadUserInputHook{
+                 cpu: ucpu,
+                 })
+     }
+
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(M_LOG_DEBUG_BUF_LENGTH, &DebugLogHook{
+                 cpu: ucpu,
+                 })
+     }
+
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(M_IO_ALARM, &AlarmHook{
+                 cpu: ucpu,
+                 })
+     }
+
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(M_IO_AIRFLOW, &AirflowHook{
+                 cpu: ucpu,
+                 })
+     }
+
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(M_IO_LOCK, &LockHook{
+                 cpu: ucpu,
+                 })
+     }
+
+     ucpu.Comm <- func(c *UserCpu) {
+         c.Mem.WriteHook(M_IO_TEMPERATURE, &TemperatureHook{
                  cpu: ucpu,
                  })
      }

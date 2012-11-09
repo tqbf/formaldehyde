@@ -180,7 +180,7 @@ func main() {
     for { runtime.Gosched()}
 
 
-
+/// TODO -> It is a bit tricky to get the code working below. Fixing the pointers to the memory and CPU are trivial. But in order to setup hooks and send other commands to the CPU (as done above) CPU.Loop() must have been called. But this will execute the actual code already. So the user cpu code needs to be adjusted.. I started to that, but broke the code, so I reverted to this version for the weekend. 
 
 //
 //	maybe_cpu := func(cpu *msp43x.CPU, m devent, a uint16) {
