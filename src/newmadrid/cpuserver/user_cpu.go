@@ -1,16 +1,13 @@
 package main
 
 import (
-	"log"
-	"newmadrid/msp43x"
-	"bytes"
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
+	"newmadrid/msp43x"
 )
-
-
-
 
 type CpuReq struct {
 	Name  string
@@ -42,7 +39,7 @@ func CpuController(redis *RedisLand) {
 		)
 
 		if cpu, ok = cpus[req.Name]; !ok {
-			cpu = NewUserCpu(req.Name,redis)
+			cpu = NewUserCpu(req.Name, redis)
 			cpus[req.Name] = cpu
 			go cpu.Loop()
 		}
@@ -53,7 +50,7 @@ func CpuController(redis *RedisLand) {
 	}
 }
 
-func newMemory() *msp43x.HookableMemory {	
+func newMemory() *msp43x.HookableMemory {
 	return msp43x.NewHookableMemory(new(msp43x.SimpleMemory))
 }
 
@@ -66,11 +63,11 @@ const (
 
 const (
 	BreakStop = iota
-	BreakStep 
+	BreakStep
 	BreakTrace
 )
 
-type CpuRequest func(c *UserCpu) 
+type CpuRequest func(c *UserCpu)
 
 type UserCpu struct {
 	MCU *msp43x.CPU
@@ -84,26 +81,25 @@ type UserCpu struct {
 
 	Redis *RedisLand
 
-	Breakpoints map[uint16]int	
+	Breakpoints map[uint16]int
 
 	Comm chan CpuRequest
-
 }
 
 func (ucpu *UserCpu) SetupDefaultHooks() {
-     // setup PrintChar
-     ucpu.Comm <- func(c *UserCpu) {
-         c.Mem.WriteHook(0x5ce, &WriteUserOutput{
-                 cpu: ucpu,
-                 })
-     }
+	// setup PrintChar
+	ucpu.Comm <- func(c *UserCpu) {
+		c.Mem.WriteHook(0x5ce, &WriteUserOutput{
+			cpu: ucpu,
+		})
+	}
 
-     // setup user input
-     ucpu.Comm <- func(c *UserCpu) {
-         c.Mem.WriteHook(0x5d2, &ReadUserInputHook{
-                 cpu: ucpu,
-                 })
-     }
+	// setup user input
+	ucpu.Comm <- func(c *UserCpu) {
+		c.Mem.WriteHook(0x5d2, &ReadUserInputHook{
+			cpu: ucpu,
+		})
+	}
 }
 
 func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
@@ -115,16 +111,14 @@ func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 	ret.State = CpuStopped
 	ret.Comm = make(chan CpuRequest)
 	ret.Breakpoints = make(map[uint16]int)
-    ret.Name = cpuname
-    ret.Redis = redis
-
+	ret.Name = cpuname
+	ret.Redis = redis
 
 	return
 }
 
-
 func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
-    fmt.Println("Loading memory from redis")
+	fmt.Println("Loading memory from redis")
 	complete := make(chan error)
 
 	ucpu.Comm <- func(c *UserCpu) {
@@ -139,7 +133,7 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 				} else {
 					complete <- nil
 				}
-//                fmt.Println(c.Mem)
+				//                fmt.Println(c.Mem)
 			} else {
 				if err != nil {
 					complete <- err
@@ -150,11 +144,11 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 
 			return
 		}
-	
+
 		return
 	}
 
-	retval := <- complete
+	retval := <-complete
 	fmt.Println("6")
 	return retval
 }
@@ -162,22 +156,22 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 func (ucpu *UserCpu) Loop() {
 	var cpu *msp43x.CPU = ucpu.MCU
 
-	for { 
-		if ucpu.State == CpuRunning { 
+	for {
+		if ucpu.State == CpuRunning {
 			select {
 			case req := <-ucpu.Comm:
-                fmt.Println(req)
+				fmt.Println(req)
 				req(ucpu)
 
 			default:
-	 			ucpu.State = CpuRunning
-	 		 	
-	 			cur := cpu.Pc() // PC changes after Step, so remember it.
-//                fmt.Printf("PC: %x\n",cur)
+				ucpu.State = CpuRunning
 
-				nowStop := false		
-		 	
-				if kind, ok := ucpu.Breakpoints[cur]; ok { 
+				cur := cpu.Pc() // PC changes after Step, so remember it.
+				//                fmt.Printf("PC: %x\n",cur)
+
+				nowStop := false
+
+				if kind, ok := ucpu.Breakpoints[cur]; ok {
 					switch kind {
 					case BreakTrace:
 					case BreakStep:
@@ -186,11 +180,11 @@ func (ucpu *UserCpu) Loop() {
 						ucpu.State = CpuStopped
 					}
 				}
-	
+
 				if ucpu.State == CpuRunning {
-		 			if err := cpu.Step(); err != nil {
-		 				ucpu.State = CpuFault
-		 			}
+					if err := cpu.Step(); err != nil {
+						ucpu.State = CpuFault
+					}
 
 					if nowStop {
 						ucpu.State = CpuStopped
@@ -198,7 +192,7 @@ func (ucpu *UserCpu) Loop() {
 				}
 			}
 		} else {
-			req := <- ucpu.Comm
+			req := <-ucpu.Comm
 			req(ucpu)
 		}
 	}
