@@ -39,7 +39,7 @@ func (cpu *CPU) GetRegs()(regs [16]uint16) {
 	return cpu.regs
 }
 
-f// Set the image the CPU is running from. You can swap memories at runtime
+// Set the image the CPU is running from. You can swap memories at runtime
 // (as long as your compiled code can handle that)
 func (cpu *CPU) SetMemory(memory Memory) {
 	cpu.memory = memory
