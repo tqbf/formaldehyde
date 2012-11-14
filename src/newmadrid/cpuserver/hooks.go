@@ -39,7 +39,7 @@ func (c UserCpu) DebugLog(entry *bytes.Buffer) {
 	}
 
 	c.Redis.Comm <- func(r *RedisLand) {
-		r.Conn.Do("LPUSH", rediskey, entry.String())
+		r.Conn.Do("LPUSH", rediskey, fmt.Sprintf("%d:%s", time.Now().Unix(), entry.String()))
 		r.Conn.Do("LTRIM", rediskey, 0, 100)
 	}
 }
