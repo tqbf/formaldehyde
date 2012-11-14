@@ -105,6 +105,7 @@ func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 	ret.MCU = new(msp43x.CPU)
 	ret.Mem = newMemory()
 	ret.MCU.SetMemory(ret.Mem)
+	ret.MCU.SetRegs([16]uint16{0x4400})
 	ret.Image = "boot"
 	ret.State = CpuStopped
 	ret.Comm = make(chan CpuRequest)
@@ -116,9 +117,9 @@ func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 }
 
 func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
-	fmt.Println("Loading memory from redis")
-	complete := make(chan error)
+	fmt.Printf("Loading hex image from redis:%s\n", key)
 
+	complete := make(chan error)
 	ucpu.Comm <- func(c *UserCpu) {
 		c.Redis.Comm <- func(r *RedisLand) {
 			res, err := r.Conn.Do("GET", key)
@@ -147,7 +148,7 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 	}
 
 	retval := <-complete
-	fmt.Println("6")
+	fmt.Println("complete")
 	return retval
 }
 
