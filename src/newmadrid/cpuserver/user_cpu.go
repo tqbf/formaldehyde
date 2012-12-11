@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
 	"newmadrid/msp43x"
 )
 
@@ -43,8 +42,6 @@ func CpuController(redis *RedisLand) {
 			cpus[req.Name] = cpu
 			go cpu.Loop()
 		}
-
-		log.Printf("%p\n", cpu.MCU)
 
 		req.Reply <- cpu
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/bmizerany/pat"
 	"html/template"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"newmadrid/msp43x"
 	"strconv"
@@ -131,8 +130,6 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		for i, v := range c.MCU.GetRegs() {
 			regsout[i] = int(v)
 		}
-
-		log.Printf("-> %p\n", c.MCU)
 
 		out, _ := json.Marshal(RegsTop{
 			Data: RegsData{

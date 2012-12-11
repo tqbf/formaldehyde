@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 func compile(path string, haml string) (err error) {
@@ -105,20 +104,9 @@ func main() {
 	go redisLand.Loop()
 	go CpuController(redisLand)
 
-	go func() {
-		for {
-			redisLand.Comm <- func(r *RedisLand) { 
-				res, err := r.Conn.Do("GET", "flabbledy")
-				if err == nil && res != nil {
-					fmt.Println(string(res.([]byte)))
-				}
-			}
-
-			time.Sleep(12500 * time.Millisecond)
-		}
-	}()
-
 	http.Handle("/", CpuInterface(*vroot, redisLand))
+
+	log.Printf("listening for requests on localhost:8080\n")
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
