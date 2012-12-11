@@ -403,7 +403,14 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		complete := make(chan bool)
 
 		c.Comm <- func(c *UserCpu) {
-			c.Breakpoints[uint16(addr)] = parsed.Data.Event
+			if parsed.Data.Event == -1 { 
+				if _, ok := c.Breakpoints[uint16(addr)]; ok {
+					delete(c.Breakpoints, uint16(addr))
+				}
+			} else {
+				c.Breakpoints[uint16(addr)] = parsed.Data.Event
+			}
+
 			complete <- true
 		}
 
@@ -460,6 +467,18 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		err = <-complete
 		return
 	}))
+
+	m.Post("/cpu/:name/step", stateSetter(CpuStopped, func(c *UserCpu) (err error) {
+		complete := make(chan error)
+
+		c.Comm <- func(c *UserCpu) {
+			complete <- c.MCU.Step()
+		}
+
+		err = <-complete
+		return
+	}))
+
 	m.Post("/cpu/:name/stop", stateSetter(CpuStopped, nil))
 
 	m.Post("/cpu/:name/reset", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
