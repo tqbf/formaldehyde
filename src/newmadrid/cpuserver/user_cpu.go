@@ -83,20 +83,6 @@ type UserCpu struct {
 	Comm chan CpuRequest
 }
 
-func (ucpu *UserCpu) SetupDefaultHooks() {
-	ucpu.Comm <- func(c *UserCpu) {
-		// setup PrintChar
-		c.Mem.WriteHook(M_USER_OUTPUT_BYTE, WriteUserOutputHook(ucpu))
-		// setup user input
-		c.Mem.WriteHook(M_USER_INPUT_BUF_LENGTH, ReadUserInputHook(ucpu))
-		c.Mem.WriteHook(M_LOG_DEBUG_BUF_LENGTH, DebugLogHook(ucpu))
-		c.Mem.WriteHook(M_IO_ALARM, AlarmHook(ucpu))
-		c.Mem.WriteHook(M_IO_AIRFLOW, AirflowHook(ucpu))
-		c.Mem.WriteHook(M_IO_LOCK, LockHook(ucpu))
-		c.Mem.WriteHook(M_IO_TEMPERATURE, TemperatureHook(ucpu))
-	}
-}
-
 func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 	ret = new(UserCpu)
 	ret.MCU = new(msp43x.CPU)
@@ -109,6 +95,16 @@ func NewUserCpu(cpuname string, redis *RedisLand) (ret *UserCpu) {
 	ret.Breakpoints = make(map[uint16]int)
 	ret.Name = cpuname
 	ret.Redis = redis
+
+	// setup PrintChar
+	ret.Mem.WriteHook(M_USER_OUTPUT_BYTE, WriteUserOutputHook(ret))
+	// setup user input
+	ret.Mem.WriteHook(M_USER_INPUT_BUF_LENGTH, ReadUserInputHook(ret))
+	ret.Mem.WriteHook(M_LOG_DEBUG_BUF_LENGTH, DebugLogHook(ret))
+	ret.Mem.WriteHook(M_IO_ALARM, AlarmHook(ret))
+	ret.Mem.WriteHook(M_IO_AIRFLOW, AirflowHook(ret))
+	ret.Mem.WriteHook(M_IO_LOCK, LockHook(ret))
+	ret.Mem.WriteHook(M_IO_TEMPERATURE, TemperatureHook(ret))
 
 	return
 }
