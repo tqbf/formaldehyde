@@ -173,13 +173,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 	}
 
 	m.Get("/cpu/:name/state", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
-		complete := make(chan int)
-
-		c.Comm <- func(c *UserCpu) {
-			complete <- c.State
-		}
-
-		res := <-complete
+		res := c.State
 
 		out, _ := json.Marshal(&map[string]interface{}{
 			"data": &map[string]interface{}{
@@ -189,7 +183,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		fmt.Fprintf(w, "%s", string(out))
 	}))
 
-	m.Post("/cpu/:name/regs", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+	m.Post("/cpu/:name/regs", mustNotBeSleeping(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		result := &requestResult{
 			success: true,
 			data:    "",
@@ -225,7 +219,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		fmt.Fprintf(w, "%s", string(out))
 	}))
 
-	m.Post("/cpu/:name/load", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+	m.Post("/cpu/:name/load", mustNotBeSleeping(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		type loadRequest struct {
 			Key string `json:"key"`
 		}
@@ -281,12 +275,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 
 				len, err = strconv.ParseInt(lens, 0, 32)
 				if err == nil {
-					complete := make(chan bool)
-					c.Comm <- func(c *UserCpu) {
-						raw, err = c.Mem.Read(uint16(addr), uint16(len))
-						complete <- true
-					}
-					<-complete
+					raw, err = c.Mem.Read(uint16(addr), uint16(len))
 				}
 			}
 		}
@@ -299,7 +288,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 
 	}))
 
-	m.Get("/cpu/:name/memory/:address/insns", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+	m.Get("/cpu/:name/memory/:address/insns", mustNotBeSleeping(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		var (
 			addrs, cs string
 			addr, cnt int64
@@ -356,7 +345,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		fmt.Fprintf(w, "%s", string(out))
 	}))
 
-	m.Get("/cpu/:name/events", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+	m.Get("/cpu/:name/events", mustNotBeSleeping(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		type results struct {
 			success bool
 			events  map[string]int
@@ -385,7 +374,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 	}))
 
 
-	m.Post("/cpu/:name/event", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+	m.Post("/cpu/:name/event", mustNotBeSleeping(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		type cpuEvent struct {
 			Addr  string `json:"addr"`
 			Event int    `json:"event"`
