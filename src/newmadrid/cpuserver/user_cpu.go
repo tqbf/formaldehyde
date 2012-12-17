@@ -177,7 +177,8 @@ func (ucpu *UserCpu) Loop() {
 				if ucpu.State == CpuRunning {
 					if err := cpu.Step(); err != nil {
 						ucpu.State = CpuFault
-						fmt.Printf("CPU Step Error: %v\n", err)
+						mem, _ := ucpu.Mem.Load6Bytes(cur)
+						fmt.Printf("CPU Step Error: %v - %v\n", err, mem)
 					}
 		
 					if nowStop {
