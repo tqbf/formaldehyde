@@ -71,7 +71,7 @@ func ReadUserInputHook(cpu *UserCpu) msp43x.WriteHookFunc {
 					r.Conn.Do("DEL", rediskey)
 					raw := res.([]byte)
 					log.Printf("Importing %v bytes (total was %v)", length, len(raw))
-					userinput <- raw
+					userinput <- bytes.Trim(raw, "\n")
 				} else {
 					userinput <- nil
 				}
