@@ -613,7 +613,10 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 			case Op1Reti:
 				// these don't do anything
 			default:
-				cpu.src_operand_store(i, tmp)
+				err = cpu.src_operand_store(i, tmp)
+				if err != nil { 
+					return
+				}
 			}
 
 		case ItDoubleOperand:
@@ -843,7 +846,10 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 			// S4 STORE
 
 			if(i.opcode != Op2Bit && i.opcode != Op2Cmp) {
-				cpu.dst_operand_store(i, tmp)
+				err = cpu.dst_operand_store(i, tmp)
+				if err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -852,7 +858,17 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 		return newError(E_Halted, "CPUOFF set")
 	}
 
-	return nil
+	return 
+}
+
+func isAgain(err error) bool { 
+	if e, ok := err.(*CpuError); ok { 
+		if e.Kind == E_Again {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Trivial implementation of CPU step function, including advancing PC; you can
@@ -860,8 +876,6 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 func (cpu *CPU) Step() (err error) {
 	err = nil
 
-//    fmt.Printf("PC: %x\n", cpu.Pc())
-//    fmt.Printf("Mem: %v\n", cpu.memory)
 	bytes, err := cpu.memory.Load6Bytes(cpu.Pc())
 	if err != nil {
 		return
@@ -874,10 +888,16 @@ func (cpu *CPU) Step() (err error) {
 
 	cpu.regs[0] += uint16(i.Width)
 
-    //fmt.Printf("Op: %v\n", i)
-
+	fmt.Printf("STEPPING %v\n", cpu.regs[0])
 
 	err = (*cpu).Execute(&i)
+
+	if isAgain(err) { 
+		fmt.Printf("EEEEEK\n")
+		cpu.regs[0] -= uint16(i.Width)
+	}
+
+	fmt.Printf("STEPPED %v\n", cpu.regs[0])
 
 	return err
 }

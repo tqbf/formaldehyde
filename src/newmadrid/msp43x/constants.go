@@ -7,6 +7,7 @@ const (
 	E_AddressUnaligned
 	E_Halted
 	E_BadAddressFault
+	E_Again
 )
 
 // bits 15:13

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"github.com/bmizerany/pat"
 	"html/template"
 	"io/ioutil"
@@ -18,6 +19,9 @@ type cpuHandler func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *Us
 func mustCpu(handler cpuHandler) http.HandlerFunc {
 	return mustSession(func(w http.ResponseWriter, r *http.Request, s *Sessionkv) {
 		cpu := GetCpu(s.Map()["name"])
+
+		log.Printf(">> %v -> %p\n", r.URL, cpu)
+
 		handler(w, r, s, cpu)
 	})
 }
@@ -460,8 +464,8 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 		c.Comm <- func(c *UserCpu) {
 			complete <- c.MCU.Step()
 		}
+		err = <- complete
 
-		err = <-complete
 		return
 	}))
 
@@ -472,7 +476,8 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 			complete <- c.MCU.Step()
 		}
 
-		err = <-complete
+		err = <- complete
+
 		return
 	}))
 

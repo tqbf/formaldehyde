@@ -21,3 +21,7 @@ func newError(kind int, msg string) *CpuError {
 		msg:  msg,
 	}
 }
+
+func NewError(kind int, msg string) *CpuError {
+	return newError(kind, msg)
+}
