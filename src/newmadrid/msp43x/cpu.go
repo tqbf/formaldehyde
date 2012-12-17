@@ -420,7 +420,8 @@ func (cpu *CPU) dst_operand_store(i *Insn, v uint16) (err error) {
 		}
 	case i.dstMode == AmRegDirect:
 		if i.destination == 3 {
-			err = newError(E_BadOperand, "can't store to CG2 or SR")
+			// this isn't an error, it's a nop
+			return nil
 		} else {
 			cpu.bw_store(i, i.destination, v)
 		}
