@@ -317,7 +317,9 @@ func (cpu *CPU) src_operand_store(i *Insn, v uint16) (err error) {
 		}
 	case i.mode == AmRegDirect:
 		if i.source == 3 {
-			return newError(E_BadOperand, "can't store to CG2")
+			// this used to be an error but in some 2-register cases
+			// this is apparently supposed to emulate a NOP
+			return nil
 		}
 
 		cpu.bw_store(i, i.source, v)
