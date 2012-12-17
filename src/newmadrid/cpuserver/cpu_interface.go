@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"github.com/bmizerany/pat"
 	"html/template"
 	"io/ioutil"
@@ -16,11 +15,35 @@ import (
 type sessionHandler func(w http.ResponseWriter, r *http.Request, s *Sessionkv)
 type cpuHandler func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu)
 
+func errorResponse(w http.ResponseWriter, reason string) {
+	out, _ := json.Marshal(&map[string]interface{}{
+		"data": &map[string]interface{}{
+			"success": false, 
+			"reason": reason,
+		},
+	})
+	fmt.Fprintf(w, "%s", string(out))
+}
+
+func mustNotBeSleeping(handler cpuHandler) http.HandlerFunc {
+	return mustSession(func(w http.ResponseWriter, r *http.Request, s *Sessionkv) {
+		cpu := GetCpu(s.Map()["name"])
+
+		// log.Printf(">> %v -> %p\n", r.URL, cpu)
+
+		if(cpu != nil && cpu.State != CpuIoSleep) {
+			handler(w, r, s, cpu)
+		} else {
+			errorResponse(w, "not ready for this operation")
+		}
+	})	
+}
+
 func mustCpu(handler cpuHandler) http.HandlerFunc {
 	return mustSession(func(w http.ResponseWriter, r *http.Request, s *Sessionkv) {
 		cpu := GetCpu(s.Map()["name"])
 
-		log.Printf(">> %v -> %p\n", r.URL, cpu)
+		// log.Printf(">> %v -> %p\n", r.URL, cpu)
 
 		handler(w, r, s, cpu)
 	})
@@ -361,15 +384,6 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 
 	}))
 
-	errorResponse := func(w http.ResponseWriter, reason string) {
-		out, _ := json.Marshal(&map[string]interface{}{
-			"data": &map[string]interface{}{
-				"success": false, 
-				"reason": reason,
-			},
-		})
-		fmt.Fprintf(w, "%s", string(out))
-	}
 
 	m.Post("/cpu/:name/event", mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 		type cpuEvent struct {
@@ -426,7 +440,7 @@ func CpuInterface(templates string, redis *RedisLand) (m *pat.PatternServeMux) {
 	}))
 
 	stateSetter := func(state int, cb func(c *UserCpu) error) http.HandlerFunc {
-		return mustCpu(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
+		return mustNotBeSleeping(func(w http.ResponseWriter, r *http.Request, s *Sessionkv, c *UserCpu) {
 			if(cb != nil) { 
 				if err := cb(c); err != nil { 
 					errorResponse(w, fmt.Sprintf("%v", err))

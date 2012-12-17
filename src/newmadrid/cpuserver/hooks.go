@@ -54,6 +54,9 @@ func ReadUserInputHook(cpu *UserCpu) msp43x.WriteHookFunc {
 
 		var raw []byte
 		userinput := make(chan []byte)
+
+		state := cpu.State
+		cpu.State = CpuIoSleep
 		for {
 			// load from redis
 			cpu.Redis.Comm <- func(r *RedisLand) {
@@ -80,6 +83,7 @@ func ReadUserInputHook(cpu *UserCpu) msp43x.WriteHookFunc {
 
 			time.Sleep(500 * time.Millisecond)
 		}
+		cpu.State = state
 
 		// store a max of  value bytes at address in 0x5d0
 		if uint16(len(raw)) < length {

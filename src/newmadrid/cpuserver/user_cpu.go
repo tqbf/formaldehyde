@@ -56,6 +56,7 @@ const (
 	CpuRunning
 	CpuFault
 	CpuStepping
+	CpuIoSleep
 )
 
 const (
