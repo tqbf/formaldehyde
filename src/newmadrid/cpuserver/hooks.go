@@ -155,6 +155,9 @@ func LockHook(cpu *UserCpu) msp43x.WriteHookFunc {
 			cpu.DebugLog(bytes.NewBufferString("LOCK ENGAGED"))
 		} else {
 			cpu.DebugLog(bytes.NewBufferString("LOCK DISENGAGED"))
+            cpu.Redis.Comm <- func(r *RedisLand) {
+                r.Conn.Do("SET", fmt.Sprintf("%s:%s", cpu.Name, cpu.Hash), "completed")
+    		}
 		}
 
 		return

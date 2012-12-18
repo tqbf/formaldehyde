@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"newmadrid/msp43x"
+    "crypto/md5"
+    "io"
 )
 
 type CpuReq struct {
@@ -75,6 +77,8 @@ type UserCpu struct {
 
 	Image string
 
+    Hash string
+
 	State int
 
 	Redis *RedisLand
@@ -119,7 +123,15 @@ func (ucpu *UserCpu) LoadHexFromRedis(key string) error {
 			res, err := r.Conn.Do("GET", key)
 			if err == nil && res != nil {
 				raw := res.([]byte)
+
+
 				buf := bytes.NewBuffer(raw)
+
+
+				hash_buf := bytes.NewBuffer(raw)
+                h := md5.New();
+                io.Copy(h, bufio.NewReader(hash_buf));
+                c.Hash = fmt.Sprintf("%x", h.Sum(nil));
 
 				if err := msp43x.LoadHex(c.Mem, bufio.NewReader(buf)); err != nil {
 					complete <- err
