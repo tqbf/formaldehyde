@@ -544,8 +544,9 @@ func (cpu *CPU) Execute(i *Insn) (err error) {
 				cpu.regs[0] = src
 
 			case Op1Reti:
-				panic("Not implemented RETI")
-
+				// OK OK OK GRAHAM 
+				// panic("Not implemented RETI")
+				return
 			}
 
 			// S3 FLAGS
