@@ -10,6 +10,8 @@ import (
 func LoadHex(memory Memory, in *bufio.Reader) (err error) {
 	err = nil
 
+	memory.Clear()
+
 	for { 
 		line, _, xerr := in.ReadLine()
 		if xerr != nil { 
