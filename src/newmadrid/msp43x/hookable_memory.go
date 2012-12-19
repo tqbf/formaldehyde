@@ -110,6 +110,10 @@ func (self *HookableMemory) String() string {
 	return self.mem.String()
 }
 
+func (self *HookableMemory) Clear() {
+	self.mem.Clear()
+}
+
 func (self *HookableMemory) Read(address uint16, len uint16) ([]byte, error) {
 	return self.mem.Read(address, len)
 }

@@ -18,7 +18,8 @@ type Memory interface {
 	StoreWordDirect(address uint16, value uint16) error
 	LoadByte(address uint16) (uint8, error)
 	StoreByte(address uint16, value uint8) error
-    Read(address uint16, len uint16) ([]byte, error)
+        Read(address uint16, len uint16) ([]byte, error)
+	Clear()
 }
 
 // The CPU (no user serviceable parts inside). Just instantiate directly.

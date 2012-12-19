@@ -8,6 +8,10 @@ import (
 // Simplest possible case, memory is just an array of bytes
 type SimpleMemory [65536]byte
 
+func (mem *SimpleMemory) Clear() {
+	for i := range mem { mem[i] = 0 }
+}
+
 func (mem *SimpleMemory) Load6Bytes(address uint16) ([]byte, error) {
 	if address & 1 != 0 {
 		return nil, newError(E_AddressUnaligned, "insn address unaligned")
