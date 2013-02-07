@@ -51,3 +51,4 @@ func Barf(filename string, data []byte) error {
 
 	return nil
 }
+
