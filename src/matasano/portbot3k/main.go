@@ -8,10 +8,19 @@ import (
 	"net"
 	"os"
 	"strings"
+	"runtime"
+	"syscall"
 )
 
 
 func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	syscall.Setrlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{
+		Cur: 8192,
+		Max: 8192,
+	})
+
 	ip_in_f := os.Stdin
 	infile := flag.String("hosts", "", "file containing IP addresses (default: stdin)")
 	max_inflight := flag.Int("max", 10, "maximum in flight requests")
@@ -45,7 +54,7 @@ func main() {
 		}
 	}
 
-	result := util.PortScan(addrs, rset, util.PortScanPolicy{
+	result := util.PortScan(addrs, rset, &util.DefaultPolicy{
 		MaxInFlight: *max_inflight,
 	})
 

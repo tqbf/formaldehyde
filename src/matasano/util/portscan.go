@@ -8,6 +8,11 @@ import (
 	"strings"
 	"time"
 	"strconv"
+	"matasano/ewma"
+	"syscall"
+	"sync"
+	"runtime"
+	"sync/atomic"
 )
 
 type PortRange struct {
@@ -15,6 +20,14 @@ type PortRange struct {
 }
 
 type PortRangeSet []PortRange
+
+const (
+	ProbeSuccess = iota
+	ProbeRefused
+	ProbeFailed
+	ProbeTimeout
+	ProbeSquelch
+)
 
 func ParsePortRanges(input string) PortRangeSet {
 	res := make([]PortRange, 0, 10)
@@ -61,6 +74,66 @@ func ParsePortRanges(input string) PortRangeSet {
 	return res
 }
 
+type HostPort struct {
+	Addr *net.IPAddr
+	Port uint16
+}
+
+func ProbePortTimeout(addr HostPort, timeout time.Duration) (code int, err error) { 
+	code = ProbeFailed
+	err = nil
+
+	s, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0) 
+	if err != nil { 
+		return
+	} 
+
+	defer syscall.Close(s)
+
+	// #go-nuts, this isn't ever going to fail
+	_ = syscall.SetNonblock(s, true)
+
+	sa := syscall.SockaddrInet4{}
+	sa.Port = int(addr.Port)
+	b := addr.Addr.IP.To4()
+	for i := 0; i < 4; i++ {
+		sa.Addr[i] = b[i]
+	}
+
+	err = syscall.Connect(s, &sa)
+	if err != nil && err != syscall.EINPROGRESS { 
+		return
+	}
+
+	tv := syscall.NsecToTimeval(int64(timeout))
+	
+	off := int(s) / 32
+	bit := int(s) % 32 
+	
+	fds := syscall.FdSet{}
+	fds.Bits[off] |= 1 << uint(bit)	
+
+	err = syscall.Select(s + 1, nil, &fds, nil, &tv)
+	if err != nil { 
+		return
+	}
+
+	if fds.Bits[off] & (1 << uint(bit)) == 0 {
+		code = ProbeTimeout
+		return
+	}		
+
+	if _, e := syscall.Getpeername(s); e != nil {
+		// don't actually care about the error, though this 
+		// is a cheat
+		code = ProbeRefused
+	} else {
+		code = ProbeSuccess
+	}
+
+	return
+}
+
 func (self PortRangeSet) Sum() int {
 	ret := 0
 	for _, r := range(self) {
@@ -93,26 +166,104 @@ type scanningHost struct {
 	offset int
 }
 
-type HostPort struct {
-	Addr *net.IPAddr
-	Port uint16
-}
-
 func (self HostPort) String() string {
 	return fmt.Sprintf("%s:%d", self.Addr, self.Port)
 }
 
-type PortScanPolicy struct{ 
+func to4(a net.IP) uint32 {
+	v := a.To4()
+	return uint32(v[0]) << 24 | uint32(v[1]) << 16 | uint32(v[2]) << 8 | uint32(v[3])
+}
+
+type TimeoutPolicy interface { 
+	ComputeTimeout(a net.IP) time.Duration
+	Elapsed(a net.IP, d time.Duration, code int)
+}
+
+type WindowingPolicy interface {
+	ComputeFirstVolley() int
+}
+
+type PortScanPolicy interface { 
+	TimeoutPolicy
+	WindowingPolicy
+}
+
+type DefaultPolicy struct {
 	MaxInFlight int
+
+	alltimeout ewma.EWMA
+	timeouts map[uint32]ewma.EWMA
+	mux sync.Mutex
+}
+
+func (self *DefaultPolicy) ComputeFirstVolley() int {
+	return self.MaxInFlight
+}
+
+func (self *DefaultPolicy) ComputeTimeout(a net.IP) time.Duration {	
+	var timeout time.Duration = 5 * time.Second
+
+	self.mux.Lock()
+	defer self.mux.Unlock()
+
+	v := self.alltimeout.Read()
+	if v != 0 { 
+		timeout = (time.Duration(v) * time.Millisecond) * 8
+	}
+
+	e, ok := self.timeouts[to4(a)]
+	if ok {
+		timeout = (time.Duration(e.Read()) * time.Millisecond) * 4
+	}
+
+	if timeout < (20 * time.Millisecond) {
+		timeout = 20 * time.Millisecond
+	}
+		
+	return timeout
+}
+
+func (self *DefaultPolicy) Elapsed(a net.IP, d time.Duration, code int) { 
+	var e ewma.EWMA
+	var ok bool
+	var delt = uint64(d / time.Millisecond) 
+
+	self.mux.Lock()
+	defer self.mux.Unlock()	
+
+	if code != ProbeTimeout && delt != 0 && (code == ProbeSuccess || code == ProbeRefused) { 
+		self.alltimeout.Add(delt)
+	}
+	
+	if self.timeouts == nil { 
+		if code == ProbeTimeout {
+			// don't try to get smart if we have no real samples
+			return 
+		}
+
+		self.timeouts = make(map[uint32]ewma.EWMA)
+	}
+
+	if e, ok = self.timeouts[to4(a)]; !ok {
+		e = ewma.EWMA{}
+	}
+
+	if code == ProbeSuccess || code == ProbeRefused {
+		e.Add(delt + 1)
+		self.timeouts[to4(a)] = e
+	}
 }
 
 func PortScan(inaddrs []*net.IPAddr, ports PortRangeSet, policy PortScanPolicy) map[HostPort]int {
+
 	ret := make(map[HostPort]int)
 	random_port_mask := ports.Randomizer()
 
 	type result struct {
 		sockAddr HostPort
 		result   int
+		elapsed	 time.Duration
 	}
 
 	var addrs []scanningHost
@@ -124,79 +275,86 @@ func PortScan(inaddrs []*net.IPAddr, ports PortRangeSet, policy PortScanPolicy) 
 	}
 
 	results := make(chan result)
+	requests := make(chan HostPort)
 
-	probe := func(sockAddr HostPort) {
-		if sockAddr.Addr == nil { 
-			return
-		}
+	allc := uint32(0)
 
-		fmt.Printf("%v\n", sockAddr)
+	probe := func(which int) {
+		for { 
+			sockAddr := <- requests
 
-		conn, err := net.DialTimeout("tcp",
-			sockAddr.String(),
-			5*time.Second)
-
-		if conn != nil {			
-			defer conn.Close()
-		}
-
-		if err == nil {
-			results <- result{
-				sockAddr: sockAddr,
-				result:   1,
+			if sockAddr.Addr == nil { 
+				return
 			}
-		} else {
+
+			atomic.AddUint32(&allc, 1)
+	
+			timeout := policy.ComputeTimeout(sockAddr.Addr.IP)
+
+			t := time.Now()
+			code, err := ProbePortTimeout(sockAddr, timeout)
+			if err != nil {
+				fmt.Print("err: %v\n", err)
+			}
+
+			policy.Elapsed(sockAddr.Addr.IP, time.Since(t), code)
+
+			// fmt.Printf("(%d) %v %dms (of %dms) %dgr\n", allc, sockAddr, time.Since(t) / time.Millisecond, timeout / time.Millisecond, runtime.NumGoroutine())
+
 			results <- result{
 				sockAddr: sockAddr,
-				result:   0,
+				result:   code,
+				elapsed:  time.Since(t),
 			}
 		}
 	}
 
-	port_sum := ports.Sum()
-	total_count := port_sum * len(addrs)
+	port_sums := ports.Sum()	
+	total_count := port_sums * len(addrs)
 
 	hostoff := 0
 	hostperm := rand.Perm(len(addrs))
 
-	taps := 0
-	selector := func() HostPort {
-		if taps == total_count { 
-			return HostPort{ nil, 0 }
-		} 
-
-		taps += 1
-
-		for { 
-			hostoff = (hostoff + 1) % len(addrs)
-			idx := hostperm[hostoff]
-			if addrs[idx].offset < port_sum { 
-				port := random_port_mask[addrs[idx].offset]
-				addrs[idx].offset += 1
-				return HostPort{
-					Addr: &addrs[idx].addr,
-					Port: port,
-				}
-			}
+	go func() { 
+	 	for taps := 0; taps < total_count; taps++ { 
+	 		for { 
+	 			hostoff = (hostoff + 1) % len(addrs)
+	 			idx := hostperm[hostoff]
+	 			if addrs[idx].offset < port_sums { 
+	 				port := random_port_mask[addrs[idx].offset]
+	 				addrs[idx].offset += 1
+	 				requests <- HostPort{
+	 					Addr: &addrs[idx].addr,
+	 					Port: port,
+	 				}
+	 			}
+	 		}
+	 
+	 		panic("not reached")
 		}
 
-		panic("not reached")
-		return HostPort{ nil, 0 }
-	}
+		for i := 0; i < policy.ComputeFirstVolley(); i++ {
+			requests <- HostPort{ nil, 0 }
+		}
+	}()
 
-	for i := 0; i < policy.MaxInFlight; i++ { 
-		go probe(selector())
+	for i := 0; i < policy.ComputeFirstVolley(); i++ { 
+		go probe(i)
 	}
 
 	for i := 0; i < total_count; i++ { 
 		res := <- results
-		if res.result > 0 { 
+			
+		if res.result == ProbeSuccess { 
 			ret[res.sockAddr] = res.result
 		}		
 
-		if i < total_count {
-			go probe(selector())
-		}
+		if res.result == ProbeSquelch {
+			total_count -= 1
+			time.Sleep(50 * time.Millisecond)
+			runtime.GC()
+			requests <- res.sockAddr
+		} 
 	}
 
 	return ret
