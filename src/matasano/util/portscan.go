@@ -11,7 +11,6 @@ import (
 	"matasano/ewma"
 	"syscall"
 	"sync"
-	"runtime"
 	"sync/atomic"
 )
 
@@ -176,26 +175,30 @@ func to4(a net.IP) uint32 {
 	return uint32(v[0]) << 24 | uint32(v[1]) << 16 | uint32(v[2]) << 8 | uint32(v[3])
 }
 
-type TimeoutPolicy interface { 
-	ComputeTimeout(a net.IP) time.Duration
-	Elapsed(a net.IP, d time.Duration, code int)
-}
-
-type WindowingPolicy interface {
-	ComputeFirstVolley() int
+type ProbePositive struct {
+	SockAddr HostPort
+	Elapsed	 time.Duration
+	Complete bool
 }
 
 type PortScanPolicy interface { 
-	TimeoutPolicy
-	WindowingPolicy
+	ComputeFirstVolley() int
+	ComputeTimeout(a net.IP) time.Duration
+	Elapsed(a net.IP, d time.Duration, code int)
+	ResultChannel() chan ProbePositive
 }
 
 type DefaultPolicy struct {
 	MaxInFlight int
-
+	LiveResults chan ProbePositive
+	
 	alltimeout ewma.EWMA
 	timeouts map[uint32]ewma.EWMA
 	mux sync.Mutex
+}
+
+func (self *DefaultPolicy) ResultChannel() chan ProbePositive {
+	return self.LiveResults
 }
 
 func (self *DefaultPolicy) ComputeFirstVolley() int {
@@ -293,10 +296,7 @@ func PortScan(inaddrs []*net.IPAddr, ports PortRangeSet, policy PortScanPolicy) 
 			timeout := policy.ComputeTimeout(sockAddr.Addr.IP)
 
 			t := time.Now()
-			code, err := ProbePortTimeout(sockAddr, timeout)
-			if err != nil {
-				fmt.Printf("err: %v (%s)\n", err, sockAddr)
-			}
+			code, _ := ProbePortTimeout(sockAddr, timeout)
 
 			policy.Elapsed(sockAddr.Addr.IP, time.Since(t), code)
 
@@ -348,14 +348,27 @@ func PortScan(inaddrs []*net.IPAddr, ports PortRangeSet, policy PortScanPolicy) 
 			
 		if res.result == ProbeSuccess { 
 			ret[res.sockAddr] = res.result
+
+			ch := policy.ResultChannel()
+
+			if ch != nil { 
+				ch <- ProbePositive{
+					SockAddr: res.sockAddr,
+					Elapsed: res.elapsed,
+				}
+			}
 		}		
 
 		if res.result == ProbeSquelch {
 			total_count -= 1
 			time.Sleep(50 * time.Millisecond)
-			runtime.GC()
 			requests <- res.sockAddr
 		} 
+	}
+
+	ch := policy.ResultChannel()
+	if ch != nil { 
+		close(ch)
 	}
 
 	return ret
