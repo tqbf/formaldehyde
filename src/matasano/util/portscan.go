@@ -39,13 +39,13 @@ func ParsePortRanges(input string) PortRangeSet {
 			l := strings.Trim(r[0:sep], " \t\r\n")
 			r = strings.Trim(r[sep+1:], " \t\r\n")
 			
-			lp, err := strconv.ParseInt(l, 10, 16)
+			lp, err := strconv.ParseUint(l, 10, 16)
 			if err != nil { 
 				log.Printf("invalid port range \"%s\"", l)
 				continue
 			}
 
-			rp, err := strconv.ParseInt(r, 10, 16)
+			rp, err := strconv.ParseUint(r, 10, 16)
 			if err != nil { 
 				log.Printf("invalid port range \"%s\"", r)
 				continue
@@ -146,8 +146,9 @@ func (self PortRangeSet) Randomizer() []uint16 {
 	out := make([]uint16, 0, len(self) * 10)
 
 	for _, r := range(self) {
-		for s := r.start; s <= r.stop; s++ { 
-			out = append(out, s)
+		stop := uint32(r.stop)
+		for s := uint32(r.start); s <= stop; s++ {
+			out = append(out, uint16(s))
 		}	
 	}
 
@@ -294,7 +295,7 @@ func PortScan(inaddrs []*net.IPAddr, ports PortRangeSet, policy PortScanPolicy) 
 			t := time.Now()
 			code, err := ProbePortTimeout(sockAddr, timeout)
 			if err != nil {
-				fmt.Print("err: %v\n", err)
+				fmt.Printf("err: %v (%s)\n", err, sockAddr)
 			}
 
 			policy.Elapsed(sockAddr.Addr.IP, time.Since(t), code)
