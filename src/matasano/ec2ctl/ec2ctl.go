@@ -16,12 +16,12 @@ var MatasanoGroups = map[string]ec2.SecurityGroup{
 
 var MatasanoAMIs = map[string]string { 
 	"WebChallenge": "ami-ae3fc3c7",
-	"ProtocolChallenge": "ami-69804f00",
+	"ProtocolChallenge": "ami-877816ee",
 }
 
 var MatasanoAMIsReverse = map[string]string { 
 	"ami-ae3fc3c7": "WebChallenge",
-	"ami-69804f00": "ProtocolChallenge",
+	"ami-877816ee": "ProtocolChallenge",
 
 }
 

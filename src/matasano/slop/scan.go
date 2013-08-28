@@ -12,22 +12,17 @@ func main() {
 	f, _ := os.Open("req.raw")
 	buf, _ := ioutil.ReadAll(f)
 
-	web.Debug = true
 	result := web.AnnotateHttp(buf)
-
-	fmt.Println(string(result))
 
 	f, _ = os.Open("rules")
 	buf, _ = ioutil.ReadAll(f)
 
 	r := web.ParseRules(buf)
 
-	for i, rr := range(r) { 
-		fmt.Printf("%d: %v\n", i, rr)	
-		if rr.Code == web.RuleList {
-			for j := 0; j < len(rr.Strings); j++ { 
-				fmt.Println(string(rr.Strings[j]))
-			}
-		}
+	subs, _ := web.RunAnnotated(result, r)
+
+	for s := range(subs) { 
+		s.Raw = s.Raw[0:5]
+		fmt.Printf("inj: %v\n", s)
 	}
 }
