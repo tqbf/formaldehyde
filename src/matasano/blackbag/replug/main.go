@@ -46,7 +46,7 @@ func main() {
 			log.Fatal("can't parse outgoing port: ", err)
 		}
 
-		if len(m) > 2 {
+		if len(m) > 2 && len(m[3]) > 0 {
 			lport, err, ltls = ptls(string(m[3]))
 			if err != nil { 
 				log.Fatal("can't parse incoming port: ", err)
